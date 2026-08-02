@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: user-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: "${NACOS_ADDR:nacos:8848}"
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}/user_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:incentive}
+    password: ${MYSQL_PASSWORD:change-me}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+server: { port: 8081 }
+management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }

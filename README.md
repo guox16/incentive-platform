@@ -26,6 +26,8 @@
 
 首次初始化仓库、检查敏感文件并推送远程的完整步骤见 [Git 首次上传指南](docs/git-operation-guide.md)。
 
+用户服务的代码阅读顺序、业务调用链、调试方法和练习题见 [用户模块学习指南](docs/user-module-learning-guide.md)。
+
 - 对外 API 固定使用 `/api/v1` 前缀；命令接口必须支持幂等键。
 - 每个服务只拥有自己的数据库，禁止跨库查询和外键。
 - 所有 HTTP 响应透传或生成 `X-Trace-Id`；错误格式统一为 `code`、`message`、`traceId`、`timestamp`。

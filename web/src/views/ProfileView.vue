@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
 import type { ApiError, PointBalanceResponse, UserResponse } from '../api/types';
+import AccountHeader from '../components/AccountHeader.vue';
 
 const router = useRouter();
 const profile = ref<UserResponse | null>(null);
@@ -148,16 +149,7 @@ onUnmounted(clearFeedback);
       <symbol id="profile-logout" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></symbol>
     </svg>
 
-    <header class="top-nav">
-      <div class="brand"><span class="brand-mark">得</span><span>偶得</span></div>
-      <nav aria-label="主导航">
-        <RouterLink to="/profile" class="active"><svg><use href="#profile-user" /></svg><span>用户信息</span></RouterLink>
-        <RouterLink to="/points"><svg><use href="#profile-points" /></svg><span>积分明细</span></RouterLink>
-        <a href="#" @click.prevent><svg><use href="#profile-gift" /></svg><span>幸运抽奖</span></a>
-        <a href="#" @click.prevent><svg><use href="#profile-bag" /></svg><span>兑换商城</span></a>
-      </nav>
-      <div class="top-support"><span>服务中心</span><strong>400 · 888 · 2608</strong></div>
-    </header>
+    <AccountHeader active="profile" />
 
     <main class="workspace" aria-live="polite">
       <div v-if="loading" class="state-panel"><span class="loader" aria-hidden="true"></span><strong>正在加载账户信息</strong><p>请稍候，正在同步你的账户状态与积分</p></div>

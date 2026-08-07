@@ -3,6 +3,7 @@ import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
+import AccountHeader from '../components/AccountHeader.vue';
 import type {
   ApiError,
   DailyCheckInResponse,
@@ -163,15 +164,7 @@ onMounted(loadPoints);
       <symbol id="points-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
     </svg>
 
-    <header class="top-nav">
-      <RouterLink class="brand" to="/profile"><span class="brand-mark">偶</span><span>偶得</span></RouterLink>
-      <nav aria-label="主导航">
-        <RouterLink to="/profile"><svg><use href="#points-user" /></svg><span>用户信息</span></RouterLink>
-        <RouterLink to="/points" class="active"><svg><use href="#points-coin" /></svg><span>积分权益</span></RouterLink>
-        <a href="#activities" @click.prevent="activeTab = 'activities'"><svg><use href="#points-gift" /></svg><span>活动中心</span></a>
-      </nav>
-      <div class="top-support"><span>服务中心</span><strong>400 · 888 · 2608</strong></div>
-    </header>
+    <AccountHeader active="points" />
 
     <main class="workspace" aria-live="polite">
       <section v-if="loading" class="state-panel"><span class="loader" aria-hidden="true"></span><strong>正在同步积分权益</strong><p>请稍候，正在获取积分、签到与活动信息。</p></section>

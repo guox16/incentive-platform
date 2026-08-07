@@ -13,7 +13,6 @@ import com.incentive.points.support.PointBusinessException;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -120,19 +119,19 @@ public class PointAccountService {
   private NormalizedCommand normalize(PointCommandRequest request, PointTransactionType type) {
     String source = request.source().trim().toUpperCase(Locale.ROOT);
     String remark = request.remark() == null || request.remark().isBlank() ? null : request.remark().trim();
-    return new NormalizedCommand(request.businessId().toString(), request.userId(),
+    return new NormalizedCommand(request.businessId(), request.userId(),
         type, request.amount(), source, remark);
   }
 
   /** 将积分流水实体转换为接口响应。 */
   private PointTransactionResponse toResponse(PointTransaction transaction, boolean replayed) {
-    return new PointTransactionResponse(UUID.fromString(transaction.getId()),
-        UUID.fromString(transaction.getBusinessId()), transaction.getUserId(),
+    return new PointTransactionResponse(transaction.getId(),
+        transaction.getBusinessId(), transaction.getUserId(),
         transaction.getType(), transaction.getAmount(), transaction.getBalanceBefore(),
         transaction.getBalanceAfter(), transaction.getSource(), transaction.getRemark(),
         transaction.getCreatedAt(), replayed);
   }
 
-  private record NormalizedCommand(String businessId, Long userId, PointTransactionType type,
+  private record NormalizedCommand(Long businessId, Long userId, PointTransactionType type,
                                    long amount, String source, String remark) {}
 }

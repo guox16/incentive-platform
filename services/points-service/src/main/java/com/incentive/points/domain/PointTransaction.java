@@ -4,12 +4,13 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
-import java.util.UUID;
 
 /**
  * 积分流水是只追加的事实记录。应用层只创建和查询流水，不暴露修改或删除入口。
@@ -20,11 +21,11 @@ import java.util.UUID;
     indexes = @Index(name = "idx_point_transaction_user_time", columnList = "user_id,created_at"))
 public class PointTransaction {
   @Id
-  @Column(nullable = false, length = 36)
-  private String id;
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-  @Column(name = "business_id", nullable = false, length = 64, updatable = false)
-  private String businessId;
+  @Column(name = "business_id", nullable = false, updatable = false)
+  private Long businessId;
 
   @Column(name = "user_id", nullable = false, updatable = false)
   private Long userId;
@@ -55,9 +56,8 @@ public class PointTransaction {
   protected PointTransaction() {}
 
   /** 创建一条不可修改的积分流水记录。 */
-  public PointTransaction(String businessId, Long userId, PointTransactionType type, long amount,
+  public PointTransaction(Long businessId, Long userId, PointTransactionType type, long amount,
       long balanceBefore, long balanceAfter, String source, String remark) {
-    this.id = UUID.randomUUID().toString();
     this.businessId = businessId;
     this.userId = userId;
     this.type = type;
@@ -70,9 +70,9 @@ public class PointTransaction {
   }
 
   /** 获取流水 ID。 */
-  public String getId() { return id; }
+  public Long getId() { return id; }
   /** 获取业务幂等号。 */
-  public String getBusinessId() { return businessId; }
+  public Long getBusinessId() { return businessId; }
   /** 获取用户 ID。 */
   public Long getUserId() { return userId; }
   /** 获取积分变动类型。 */

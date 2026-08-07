@@ -11,9 +11,9 @@ import com.incentive.points.repository.PointAccountRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +31,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 })
 @Testcontainers(disabledWithoutDocker = true)
 class PointServiceMySqlIntegrationTest {
+  private static final AtomicLong BUSINESS_IDS = new AtomicLong();
   @Container
   static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
       .withDatabaseName("points_db")
@@ -57,7 +58,7 @@ class PointServiceMySqlIntegrationTest {
   @Test
   void persistsBalanceLedgerIdempotencyAndRollbackTogether() {
     Long userId = 1L;
-    UUID creditBusinessId = UUID.randomUUID();
+    long creditBusinessId = nextBusinessId();
     PointCommandRequest credit = command(creditBusinessId, userId, 100, "award");
 
     assertThat(service.getBalance(userId).accountCreated()).isFalse();
@@ -65,7 +66,7 @@ class PointServiceMySqlIntegrationTest {
     assertThat(service.credit(credit).replayed()).isTrue();
     assertThat(transactionRepository.count()).isEqualTo(1);
 
-    PointCommandRequest excessiveDebit = command(UUID.randomUUID(), userId, 101, "exchange");
+    PointCommandRequest excessiveDebit = command(nextBusinessId(), userId, 101, "exchange");
     assertThatThrownBy(() -> service.debit(excessiveDebit)).isInstanceOf(InsufficientPointsException.class);
     assertThat(service.getBalance(userId).balance()).isEqualTo(100);
     assertThat(transactionRepository.count()).isEqualTo(1);
@@ -74,14 +75,14 @@ class PointServiceMySqlIntegrationTest {
   @Test
   void serializesConcurrentCommandsWithoutLostUpdates() throws Exception {
     Long userId = 1L;
-    service.credit(command(UUID.randomUUID(), userId, 10, "seed"));
+    service.credit(command(nextBusinessId(), userId, 10, "seed"));
 
     var executor = Executors.newFixedThreadPool(8);
     try {
       List<Callable<Void>> tasks = new ArrayList<>();
       for (int index = 0; index < 8; index++) {
         tasks.add(() -> {
-          service.credit(command(UUID.randomUUID(), userId, 1, "task"));
+          service.credit(command(nextBusinessId(), userId, 1, "task"));
           return null;
         });
       }
@@ -97,7 +98,7 @@ class PointServiceMySqlIntegrationTest {
   @Test
   void concurrentDuplicateBusinessIdChangesBalanceOnlyOnce() throws Exception {
     Long userId = 1L;
-    PointCommandRequest request = command(UUID.randomUUID(), userId, 5, "award");
+    PointCommandRequest request = command(nextBusinessId(), userId, 5, "award");
     var executor = Executors.newFixedThreadPool(2);
     try {
       List<Callable<PointTransactionResponse>> duplicateTasks = List.of(
@@ -113,7 +114,9 @@ class PointServiceMySqlIntegrationTest {
     assertThat(transactionRepository.count()).isEqualTo(1);
   }
 
-  private PointCommandRequest command(UUID businessId, Long userId, long amount, String source) {
+  private PointCommandRequest command(Long businessId, Long userId, long amount, String source) {
     return new PointCommandRequest(businessId, userId, amount, source, null);
   }
+
+  private static long nextBusinessId() { return BUSINESS_IDS.incrementAndGet(); }
 }

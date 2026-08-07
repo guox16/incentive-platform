@@ -42,3 +42,16 @@ export type PointTransactionPageResponse = {
   totalElements: number;
   totalPages: number;
 };
+
+export type DailyCheckInResponse = {
+  userId: number;
+  businessDate: string;
+  checkedInToday: boolean;
+  currentStreak: number;
+  rewardPoints: number;
+  rewardStatus: 'AVAILABLE' | 'PENDING' | 'AWARDED';
+  checkInId: number | null;
+  pointTransactionId: number | null;
+  balanceAfter: number | null;
+  signedDates: string[];
+};

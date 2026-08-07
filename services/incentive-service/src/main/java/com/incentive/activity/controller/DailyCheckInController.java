@@ -23,13 +23,13 @@ public class DailyCheckInController {
 
   @GetMapping
   @Operation(summary = "查询今日签到状态")
-  public DailyCheckInResponse status(@PathVariable @Positive Long userId) {
+  public DailyCheckInResponse status(@PathVariable("userId") @Positive Long userId) {
     return service.getStatus(userId);
   }
 
   @PostMapping
   @Operation(summary = "完成今日签到")
-  public DailyCheckInResponse checkIn(@PathVariable @Positive Long userId) {
+  public DailyCheckInResponse checkIn(@PathVariable("userId") @Positive Long userId) {
     return service.checkIn(userId);
   }
 }

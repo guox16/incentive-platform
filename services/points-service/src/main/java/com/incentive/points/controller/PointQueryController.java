@@ -33,8 +33,8 @@ public class PointQueryController {
   @Operation(summary = "分页查询积分流水")
   public PointTransactionPageResponse transactions(
       @PathVariable("userId") Long userId,
-      @RequestParam(defaultValue = "0") @Min(0) int page,
-      @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+      @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
+      @RequestParam(name = "size", defaultValue = "20") @Min(1) @Max(100) int size) {
     return service.getTransactions(userId, page, size);
   }
 }

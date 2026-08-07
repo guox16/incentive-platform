@@ -3,8 +3,8 @@ import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
+import type { ApiError, PointBalanceResponse, PointTransactionPageResponse, PointTransactionResponse } from '../api/types';
 
-type Profile = { points?: number | string; pointBalance?: number | string };
 type RecordKind = 'earn' | 'spend';
 type PointRecord = { id: number; date: string; time: string; title: string; detail: string; amount: number; kind: RecordKind };
 
@@ -14,7 +14,6 @@ const error = ref('');
 const balance = ref(0);
 const activeFilter = ref<'all' | RecordKind>('all');
 
-// 积分流水将在对应接口接入后写入此列表。
 const records = ref<PointRecord[]>([]);
 
 const filteredRecords = computed(() => activeFilter.value === 'all' ? records.value : records.value.filter(record => record.kind === activeFilter.value));
@@ -27,8 +26,8 @@ const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(ba
 
 function getErrorMessage(requestError: unknown) {
   if (axios.isAxiosError(requestError)) {
-    const data = requestError.response?.data as { message?: string; error?: string } | undefined;
-    return data?.message || data?.error || '暂时无法获取积分余额，请稍后重试';
+    const data = requestError.response?.data as ApiError | undefined;
+    return data?.message || '暂时无法获取积分信息，请稍后重试';
   }
   return '暂时无法获取积分余额，请稍后重试';
 }
@@ -39,13 +38,30 @@ async function loadPoints() {
   try {
     const userId = sessionStorage.getItem('currentUserId');
     if (!userId) { await router.replace('/login'); return; }
-    const response = await http.get(`/users/${userId}`);
-    const profile = (response.data?.data ?? response.data) as Profile;
-    balance.value = Number(profile?.points ?? profile?.pointBalance ?? 0) || 0;
+    const [balanceResponse, transactionsResponse] = await Promise.all([
+      http.get<PointBalanceResponse>(`/points/users/${userId}/balance`),
+      http.get<PointTransactionPageResponse>(`/points/users/${userId}/transactions`, { params: { page: 0, size: 100 } }),
+    ]);
+    balance.value = balanceResponse.data.balance;
+    records.value = transactionsResponse.data.items.map(toPointRecord);
   } catch (requestError) {
     if (axios.isAxiosError(requestError) && requestError.response?.status === 401) { await router.replace('/login'); return; }
     error.value = getErrorMessage(requestError);
   } finally { loading.value = false; }
+}
+
+function toPointRecord(transaction: PointTransactionResponse): PointRecord {
+  const createdAt = new Date(transaction.createdAt);
+  const kind: RecordKind = transaction.type === 'CREDIT' ? 'earn' : 'spend';
+  return {
+    id: transaction.transactionId,
+    date: new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(createdAt),
+    time: new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(createdAt),
+    title: transaction.source,
+    detail: transaction.remark || `变动后余额 ${transaction.balanceAfter}`,
+    amount: kind === 'earn' ? transaction.amount : -transaction.amount,
+    kind,
+  };
 }
 
 onMounted(loadPoints);

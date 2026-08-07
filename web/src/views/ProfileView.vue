@@ -3,23 +3,11 @@ import axios from 'axios';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
-
-type Profile = {
-  avatar?: string;
-  avatarUrl?: string;
-  nickname?: string;
-  name?: string;
-  phone?: string;
-  membershipLevel?: string;
-  memberLevel?: string;
-  points?: number | string;
-  pointBalance?: number | string;
-  accountStatus?: string;
-  status?: string;
-};
+import type { ApiError, PointBalanceResponse, UserResponse } from '../api/types';
 
 const router = useRouter();
-const profile = ref<Profile | null>(null);
+const profile = ref<UserResponse | null>(null);
+const pointBalance = ref(0);
 const loading = ref(true);
 const error = ref('');
 const loggingOut = ref(false);
@@ -30,19 +18,18 @@ const saveFeedback = ref('');
 const draft = ref({ nickname: '', phone: '' });
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 
-const nickname = computed(() => profile.value?.nickname || profile.value?.name || '未设置昵称');
+const nickname = computed(() => profile.value?.nickname || '未设置昵称');
 const phone = computed(() => profile.value?.phone || '未绑定手机号');
-const memberLevel = computed(() => profile.value?.membershipLevel || profile.value?.memberLevel || '普通会员');
-const points = computed(() => profile.value?.points ?? profile.value?.pointBalance ?? 0);
-const accountStatus = computed(() => profile.value?.accountStatus || profile.value?.status || '账户状态正常');
-const avatarUrl = computed(() => profile.value?.avatarUrl || profile.value?.avatar || '');
+const memberLevel = computed(() => '普通会员');
+const accountStatus = computed(() => '账户状态正常');
+const avatarUrl = computed(() => '');
 const avatarText = computed(() => nickname.value.slice(0, 1).toUpperCase());
-const formattedPoints = computed(() => new Intl.NumberFormat('zh-CN').format(Number(points.value) || 0));
+const formattedPoints = computed(() => new Intl.NumberFormat('zh-CN').format(pointBalance.value));
 
 function getErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { message?: string; error?: string } | undefined;
-    return data?.message || data?.error || '暂时无法获取账户信息，请稍后重试';
+    const data = error.response?.data as ApiError | undefined;
+    return data?.message || '暂时无法获取账户信息，请稍后重试';
   }
   return '暂时无法获取账户信息，请稍后重试';
 }
@@ -56,9 +43,12 @@ async function loadProfile() {
       await router.replace('/login');
       return;
     }
-    const response = await http.get(`/users/${userId}`);
-    const data = response.data?.data ?? response.data;
-    profile.value = data && typeof data === 'object' ? data as Profile : null;
+    const [profileResponse, balanceResponse] = await Promise.all([
+      http.get<UserResponse>(`/users/${userId}`),
+      http.get<PointBalanceResponse>(`/points/users/${userId}/balance`),
+    ]);
+    profile.value = profileResponse.data;
+    pointBalance.value = balanceResponse.data.balance;
   } catch (requestError) {
     if (axios.isAxiosError(requestError) && requestError.response?.status === 401) {
       await router.replace('/login');
@@ -72,7 +62,7 @@ async function loadProfile() {
 
 function startEditing() {
   if (!profile.value) return;
-  draft.value = { nickname: profile.value.nickname || profile.value.name || '', phone: profile.value.phone || '' };
+  draft.value = { nickname: profile.value.nickname, phone: profile.value.phone };
   formError.value = '';
   clearFeedback();
   editing.value = true;
@@ -115,9 +105,8 @@ async function saveProfile() {
   saving.value = true;
   formError.value = '';
   try {
-    const response = await http.put(`/users/${userId}`, { nickname: nextNickname, phone: nextPhone });
-    const data = response.data?.data ?? response.data;
-    profile.value = data && typeof data === 'object' ? data as Profile : profile.value;
+    const response = await http.put<UserResponse>(`/users/${userId}`, { nickname: nextNickname, phone: nextPhone });
+    profile.value = response.data;
     editing.value = false;
     showSaveFeedback();
   } catch (requestError) {
@@ -130,15 +119,9 @@ async function saveProfile() {
 async function logout() {
   if (loggingOut.value) return;
   loggingOut.value = true;
-  try {
-    await http.post('/auth/logout');
-  } catch {
-    // 退出本地页面不应因服务端会话已过期而受阻。
-  } finally {
-    sessionStorage.removeItem('currentUserId');
-    loggingOut.value = false;
-    await router.replace('/login');
-  }
+  sessionStorage.removeItem('currentUserId');
+  loggingOut.value = false;
+  await router.replace('/login');
 }
 
 onMounted(loadProfile);

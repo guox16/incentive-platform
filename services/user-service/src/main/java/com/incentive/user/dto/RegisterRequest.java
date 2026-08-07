@@ -6,6 +6,6 @@ import jakarta.validation.constraints.Size;
 
 public record RegisterRequest(
     @NotBlank @Pattern(regexp = "^[A-Za-z0-9_]{3,32}$") String username,
+    @NotBlank @Pattern(regexp = "^1\\d{10}$") String phone,
     @NotBlank @Size(min = 6, max = 72) String password,
     @NotBlank @Size(max = 50) String nickname) {}
-

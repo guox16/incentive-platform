@@ -38,22 +38,22 @@ class PointAccountServiceTest {
 
   @Test
   void returnsVirtualZeroBalanceWithoutCreatingAccount() {
-    UUID userId = UUID.randomUUID();
-    when(accountRepository.findById(userId.toString())).thenReturn(Optional.empty());
+    Long userId = 1L;
+    when(accountRepository.findById(userId)).thenReturn(Optional.empty());
 
     var response = service.getBalance(userId);
 
     assertThat(response.balance()).isZero();
     assertThat(response.accountCreated()).isFalse();
-    verify(accountRepository).findById(userId.toString());
+    verify(accountRepository).findById(userId);
   }
 
   @Test
   void firstCreditCreatesAccountAndLedger() {
     PointCommandRequest request = request(100, "award", "welcome");
-    PointAccount account = new PointAccount(request.userId().toString());
+    PointAccount account = new PointAccount(request.userId());
     when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.empty());
-    when(accountRepository.findByUserIdForUpdate(request.userId().toString())).thenReturn(Optional.of(account));
+    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
     when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     var response = service.credit(request);
@@ -61,7 +61,7 @@ class PointAccountServiceTest {
     assertThat(response.balanceBefore()).isZero();
     assertThat(response.balanceAfter()).isEqualTo(100);
     assertThat(response.source()).isEqualTo("AWARD");
-    verify(accountRepository).createIfAbsent(eq(request.userId().toString()), any(Instant.class));
+    verify(accountRepository).createIfAbsent(eq(request.userId()), any(Instant.class));
   }
 
   @Test
@@ -79,7 +79,7 @@ class PointAccountServiceTest {
   @Test
   void rejectsReusedBusinessIdWithDifferentPayload() {
     PointCommandRequest request = request(100, "award", null);
-    PointTransaction existing = new PointTransaction(request.businessId().toString(), request.userId().toString(),
+    PointTransaction existing = new PointTransaction(request.businessId().toString(), request.userId(),
         PointTransactionType.CREDIT, 20, 0, 20, "AWARD", null);
     when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.of(existing));
 
@@ -91,7 +91,7 @@ class PointAccountServiceTest {
   void debitWithoutAccountIsInsufficient() {
     PointCommandRequest request = request(1, "exchange", null);
     when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.empty());
-    when(accountRepository.findByUserIdForUpdate(request.userId().toString())).thenReturn(Optional.empty());
+    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.debit(request)).isInstanceOf(InsufficientPointsException.class);
   }
@@ -99,10 +99,10 @@ class PointAccountServiceTest {
   @Test
   void debitsExistingAccountAndRecordsBalanceChange() {
     PointCommandRequest request = request(40, "exchange", "order");
-    PointAccount account = new PointAccount(request.userId().toString());
+    PointAccount account = new PointAccount(request.userId());
     account.credit(100);
     when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.empty());
-    when(accountRepository.findByUserIdForUpdate(request.userId().toString())).thenReturn(Optional.of(account));
+    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
     when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
     var response = service.debit(request);
@@ -114,10 +114,10 @@ class PointAccountServiceTest {
 
   @Test
   void returnsPagedLedgerInRepositoryOrder() {
-    UUID userId = UUID.randomUUID();
+    Long userId = 1L;
     PointCommandRequest request = new PointCommandRequest(UUID.randomUUID(), userId, 10, "TASK", null);
     PointTransaction transaction = transaction(request, PointTransactionType.CREDIT, "TASK", null);
-    when(transactionRepository.findByUserIdOrderByCreatedAtDesc(eq(userId.toString()), any(Pageable.class)))
+    when(transactionRepository.findByUserIdOrderByCreatedAtDesc(eq(userId), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of(transaction)));
 
     var response = service.getTransactions(userId, 0, 20);
@@ -127,11 +127,11 @@ class PointAccountServiceTest {
   }
 
   private PointCommandRequest request(long amount, String source, String remark) {
-    return new PointCommandRequest(UUID.randomUUID(), UUID.randomUUID(), amount, source, remark);
+    return new PointCommandRequest(UUID.randomUUID(), 1L, amount, source, remark);
   }
 
   private PointTransaction transaction(PointCommandRequest request, PointTransactionType type, String source, String remark) {
-    return new PointTransaction(request.businessId().toString(), request.userId().toString(), type,
+    return new PointTransaction(request.businessId().toString(), request.userId(), type,
         request.amount(), 0, request.amount(), source, remark);
   }
 }

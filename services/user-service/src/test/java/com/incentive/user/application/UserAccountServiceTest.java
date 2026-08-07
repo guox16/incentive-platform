@@ -13,7 +13,6 @@ import com.incentive.user.repository.UserAccountRepository;
 import com.incentive.user.support.UserBusinessException;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,25 +32,27 @@ class UserAccountServiceTest {
   @Test
   void registersAccountWithHashedPassword() {
     when(repository.existsByUsername("alice")).thenReturn(false);
+    when(repository.existsByPhone("13800138000")).thenReturn(false);
     when(repository.saveAndFlush(any(UserAccount.class))).thenAnswer(invocation -> {
       UserAccount account = invocation.getArgument(0);
-      ReflectionTestUtils.setField(account, "id", UUID.randomUUID());
+      ReflectionTestUtils.setField(account, "id", 1L);
       ReflectionTestUtils.setField(account, "createdAt", Instant.now());
       ReflectionTestUtils.setField(account, "updatedAt", Instant.now());
       return account;
     });
 
-    var response = service.register(new RegisterRequest("alice", "secret12", "Alice"));
+    var response = service.register(new RegisterRequest("alice", "13800138000", "secret12", "Alice"));
 
     assertThat(response.username()).isEqualTo("alice");
     assertThat(response.nickname()).isEqualTo("Alice");
+    assertThat(response.phone()).isEqualTo("13800138000");
   }
 
   @Test
   void rejectsDuplicateUsername() {
     when(repository.existsByUsername("alice")).thenReturn(true);
 
-    assertThatThrownBy(() -> service.register(new RegisterRequest("alice", "secret12", "Alice")))
+    assertThatThrownBy(() -> service.register(new RegisterRequest("alice", "13800138000", "secret12", "Alice")))
         .isInstanceOf(UserBusinessException.class)
         .extracting("code").isEqualTo("USERNAME_ALREADY_EXISTS");
   }
@@ -59,7 +60,7 @@ class UserAccountServiceTest {
   @Test
   void returnsProfileForCorrectPassword() {
     UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
-    when(repository.findByUsername("alice")).thenReturn(Optional.of(account));
+    when(repository.findByUsernameOrPhone("alice", "alice")).thenReturn(Optional.of(account));
 
     assertThat(service.login(new LoginRequest("alice", "secret12")).username()).isEqualTo("alice");
   }
@@ -67,7 +68,7 @@ class UserAccountServiceTest {
   @Test
   void rejectsWrongPasswordWithoutLeakingAccountExistence() {
     UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
-    when(repository.findByUsername("alice")).thenReturn(Optional.of(account));
+    when(repository.findByUsernameOrPhone("alice", "alice")).thenReturn(Optional.of(account));
 
     assertThatThrownBy(() -> service.login(new LoginRequest("alice", "wrong123")))
         .isInstanceOf(UserBusinessException.class)
@@ -75,17 +76,38 @@ class UserAccountServiceTest {
   }
 
   @Test
-  void readsAndUpdatesNickname() {
-    UserAccount account = account("alice", "hash");
+  void readsAndUpdatesProfile() {
+    UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
     when(repository.findById(account.getId())).thenReturn(Optional.of(account));
 
     assertThat(service.getProfile(account.getId()).nickname()).isEqualTo("Alice");
-    assertThat(service.updateProfile(account.getId(), new UpdateProfileRequest("New name")).nickname()).isEqualTo("New name");
+    var updated = service.updateProfile(account.getId(), new UpdateProfileRequest("New name", "13900139000"));
+    assertThat(updated.nickname()).isEqualTo("New name");
+    assertThat(updated.phone()).isEqualTo("13900139000");
+  }
+
+  @Test
+  void rejectsPhoneNumberAlreadyUsedByAnotherAccount() {
+    UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
+    when(repository.findById(account.getId())).thenReturn(Optional.of(account));
+    when(repository.existsByPhone("13900139000")).thenReturn(true);
+
+    assertThatThrownBy(() -> service.updateProfile(account.getId(), new UpdateProfileRequest("New name", "13900139000")))
+        .isInstanceOf(UserBusinessException.class)
+        .extracting("code").isEqualTo("PHONE_ALREADY_EXISTS");
+  }
+
+  @Test
+  void logsInWithPhoneNumber() {
+    UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
+    when(repository.findByUsernameOrPhone("13800138000", "13800138000")).thenReturn(Optional.of(account));
+
+    assertThat(service.login(new LoginRequest("13800138000", "secret12")).username()).isEqualTo("alice");
   }
 
   @Test
   void reportsMissingUser() {
-    UUID id = UUID.randomUUID();
+    Long id = 1L;
     when(repository.findById(id)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.getProfile(id)).isInstanceOf(UserBusinessException.class)
@@ -93,11 +115,10 @@ class UserAccountServiceTest {
   }
 
   private UserAccount account(String username, String hash) {
-    UserAccount account = new UserAccount(username, hash, "Alice");
-    ReflectionTestUtils.setField(account, "id", UUID.randomUUID());
+    UserAccount account = new UserAccount(username, "13800138000", hash, "Alice");
+    ReflectionTestUtils.setField(account, "id", 1L);
     ReflectionTestUtils.setField(account, "createdAt", Instant.now());
     ReflectionTestUtils.setField(account, "updatedAt", Instant.now());
     return account;
   }
 }
-

@@ -20,14 +20,17 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "内部积分命令", description = "仅供受信服务调用")
 public class InternalPointCommandController {
   private final PointAccountService service;
+  /** 创建内部积分命令控制器。 */
   public InternalPointCommandController(PointAccountService service) { this.service = service; }
 
+  /** 接收内部服务的积分增加命令。 */
   @PostMapping("/credit")
   @Operation(summary = "增加积分")
   public PointTransactionResponse credit(@Valid @RequestBody PointCommandRequest request) {
     return service.credit(request);
   }
 
+  /** 接收内部服务的积分扣减命令。 */
   @PostMapping("/debit")
   @Operation(summary = "扣减积分")
   public PointTransactionResponse debit(@Valid @RequestBody PointCommandRequest request) {

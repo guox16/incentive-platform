@@ -14,8 +14,8 @@ import java.time.Instant;
 @Table(name = "point_accounts")
 public class PointAccount {
   @Id
-  @Column(name = "user_id", nullable = false, length = 36)
-  private String userId;
+  @Column(name = "user_id", nullable = false)
+  private Long userId;
 
   @Column(nullable = false)
   private long balance;
@@ -30,21 +30,25 @@ public class PointAccount {
   @Column(nullable = false)
   private Instant updatedAt;
 
+  /** 供 JPA 创建积分账户实体。 */
   protected PointAccount() {}
 
-  public PointAccount(String userId) {
+  /** 创建余额为零的用户积分账户。 */
+  public PointAccount(Long userId) {
     this.userId = userId;
     this.balance = 0;
     this.createdAt = Instant.now();
     this.updatedAt = createdAt;
   }
 
+  /** 增加积分并返回变更前余额。 */
   public long credit(long amount) {
     long before = balance;
     balance = Math.addExact(balance, amount);
     return before;
   }
 
+  /** 扣减积分并返回变更前余额；余额不足时抛出异常。 */
   public long debit(long amount) {
     if (balance < amount) {
       throw new InsufficientPointsException();
@@ -55,16 +59,22 @@ public class PointAccount {
   }
 
   @PrePersist
+  /** 在新增持久化前初始化创建和更新时间。 */
   void beforeInsert() {
     if (createdAt == null) createdAt = Instant.now();
     updatedAt = createdAt;
   }
 
   @PreUpdate
+  /** 在更新持久化前刷新更新时间。 */
   void beforeUpdate() { updatedAt = Instant.now(); }
 
-  public String getUserId() { return userId; }
+  /** 获取账户所属用户 ID。 */
+  public Long getUserId() { return userId; }
+  /** 获取当前积分余额。 */
   public long getBalance() { return balance; }
+  /** 获取账户创建时间。 */
   public Instant getCreatedAt() { return createdAt; }
+  /** 获取账户最后更新时间。 */
   public Instant getUpdatedAt() { return updatedAt; }
 }

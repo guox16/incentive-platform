@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public record PointCommandRequest(
     @NotNull UUID businessId,
-    @NotNull UUID userId,
+    @NotNull @Positive Long userId,
     @Positive long amount,
     @NotBlank @Size(max = 32) @Pattern(regexp = "^[A-Za-z][A-Za-z0-9_-]*$") String source,
     @Size(max = 200) String remark) {}

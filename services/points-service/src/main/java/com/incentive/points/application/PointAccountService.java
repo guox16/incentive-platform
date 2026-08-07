@@ -27,27 +27,31 @@ public class PointAccountService {
   private final PointAccountRepository accountRepository;
   private final PointTransactionRepository transactionRepository;
 
+  /** 创建积分账户应用服务。 */
   public PointAccountService(PointAccountRepository accountRepository, PointTransactionRepository transactionRepository) {
     this.accountRepository = accountRepository;
     this.transactionRepository = transactionRepository;
   }
 
-  public PointBalanceResponse getBalance(UUID userId) {
-    return accountRepository.findById(userId.toString())
+  /** 查询用户当前积分余额；未开户时返回零余额。 */
+  public PointBalanceResponse getBalance(Long userId) {
+    return accountRepository.findById(userId)
         .map(account -> new PointBalanceResponse(userId, account.getBalance(), true, account.getUpdatedAt()))
         // 未建账等同于零余额，查询操作本身绝不创建数据库记录。
         .orElseGet(() -> new PointBalanceResponse(userId, 0, false, null));
   }
 
-  public PointTransactionPageResponse getTransactions(UUID userId, int page, int size) {
+  /** 分页查询用户的积分流水。 */
+  public PointTransactionPageResponse getTransactions(Long userId, int page, int size) {
     var result = transactionRepository.findByUserIdOrderByCreatedAtDesc(
-        userId.toString(), PageRequest.of(page, size));
+        userId, PageRequest.of(page, size));
     var items = result.getContent().stream().map(transaction -> toResponse(transaction, false)).toList();
     return new PointTransactionPageResponse(items, result.getNumber(), result.getSize(),
         result.getTotalElements(), result.getTotalPages());
   }
 
   @Transactional
+  /** 为用户增加积分，并保证业务号幂等。 */
   public PointTransactionResponse credit(PointCommandRequest request) {
     NormalizedCommand command = normalize(request, PointTransactionType.CREDIT);
     PointTransaction existing = findExisting(command);
@@ -70,6 +74,7 @@ public class PointAccountService {
   }
 
   @Transactional
+  /** 扣减用户积分，并保证业务号幂等和余额充足。 */
   public PointTransactionResponse debit(PointCommandRequest request) {
     NormalizedCommand command = normalize(request, PointTransactionType.DEBIT);
     PointTransaction existing = findExisting(command);
@@ -84,6 +89,7 @@ public class PointAccountService {
     return saveTransaction(command, before, account.getBalance());
   }
 
+  /** 保存积分流水并返回响应结果。 */
   private PointTransactionResponse saveTransaction(NormalizedCommand command, long before, long after) {
     PointTransaction transaction = new PointTransaction(command.businessId(), command.userId(), command.type(),
         command.amount(), before, after, command.source(), command.remark());
@@ -95,6 +101,7 @@ public class PointAccountService {
     }
   }
 
+  /** 查找已处理的同业务号命令，并校验命令内容一致。 */
   private PointTransaction findExisting(NormalizedCommand command) {
     return transactionRepository.findByBusinessId(command.businessId()).map(existing -> {
       boolean same = existing.getUserId().equals(command.userId())
@@ -109,21 +116,23 @@ public class PointAccountService {
     }).orElse(null);
   }
 
+  /** 标准化积分命令中的字符串字段。 */
   private NormalizedCommand normalize(PointCommandRequest request, PointTransactionType type) {
     String source = request.source().trim().toUpperCase(Locale.ROOT);
     String remark = request.remark() == null || request.remark().isBlank() ? null : request.remark().trim();
-    return new NormalizedCommand(request.businessId().toString(), request.userId().toString(),
+    return new NormalizedCommand(request.businessId().toString(), request.userId(),
         type, request.amount(), source, remark);
   }
 
+  /** 将积分流水实体转换为接口响应。 */
   private PointTransactionResponse toResponse(PointTransaction transaction, boolean replayed) {
     return new PointTransactionResponse(UUID.fromString(transaction.getId()),
-        UUID.fromString(transaction.getBusinessId()), UUID.fromString(transaction.getUserId()),
+        UUID.fromString(transaction.getBusinessId()), transaction.getUserId(),
         transaction.getType(), transaction.getAmount(), transaction.getBalanceBefore(),
         transaction.getBalanceAfter(), transaction.getSource(), transaction.getRemark(),
         transaction.getCreatedAt(), replayed);
   }
 
-  private record NormalizedCommand(String businessId, String userId, PointTransactionType type,
+  private record NormalizedCommand(String businessId, Long userId, PointTransactionType type,
                                    long amount, String source, String remark) {}
 }

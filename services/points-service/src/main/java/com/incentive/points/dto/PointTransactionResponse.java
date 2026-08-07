@@ -7,7 +7,7 @@ import java.util.UUID;
 public record PointTransactionResponse(
     UUID transactionId,
     UUID businessId,
-    UUID userId,
+    Long userId,
     PointTransactionType type,
     long amount,
     long balanceBefore,

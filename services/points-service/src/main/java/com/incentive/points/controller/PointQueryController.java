@@ -7,7 +7,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import java.util.UUID;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,16 +20,19 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "积分查询")
 public class PointQueryController {
   private final PointAccountService service;
+  /** 创建积分查询控制器。 */
   public PointQueryController(PointAccountService service) { this.service = service; }
 
+  /** 查询指定用户的积分余额。 */
   @GetMapping("/balance")
   @Operation(summary = "查询积分余额")
-  public PointBalanceResponse balance(@PathVariable UUID userId) { return service.getBalance(userId); }
+  public PointBalanceResponse balance(@PathVariable("userId") Long userId) { return service.getBalance(userId); }
 
+  /** 分页查询指定用户的积分流水。 */
   @GetMapping("/transactions")
   @Operation(summary = "分页查询积分流水")
   public PointTransactionPageResponse transactions(
-      @PathVariable UUID userId,
+      @PathVariable("userId") Long userId,
       @RequestParam(defaultValue = "0") @Min(0) int page,
       @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
     return service.getTransactions(userId, page, size);

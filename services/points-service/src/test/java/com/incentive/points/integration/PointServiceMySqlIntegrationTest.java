@@ -56,7 +56,7 @@ class PointServiceMySqlIntegrationTest {
 
   @Test
   void persistsBalanceLedgerIdempotencyAndRollbackTogether() {
-    UUID userId = UUID.randomUUID();
+    Long userId = 1L;
     UUID creditBusinessId = UUID.randomUUID();
     PointCommandRequest credit = command(creditBusinessId, userId, 100, "award");
 
@@ -73,7 +73,7 @@ class PointServiceMySqlIntegrationTest {
 
   @Test
   void serializesConcurrentCommandsWithoutLostUpdates() throws Exception {
-    UUID userId = UUID.randomUUID();
+    Long userId = 1L;
     service.credit(command(UUID.randomUUID(), userId, 10, "seed"));
 
     var executor = Executors.newFixedThreadPool(8);
@@ -96,7 +96,7 @@ class PointServiceMySqlIntegrationTest {
 
   @Test
   void concurrentDuplicateBusinessIdChangesBalanceOnlyOnce() throws Exception {
-    UUID userId = UUID.randomUUID();
+    Long userId = 1L;
     PointCommandRequest request = command(UUID.randomUUID(), userId, 5, "award");
     var executor = Executors.newFixedThreadPool(2);
     try {
@@ -113,7 +113,7 @@ class PointServiceMySqlIntegrationTest {
     assertThat(transactionRepository.count()).isEqualTo(1);
   }
 
-  private PointCommandRequest command(UUID businessId, UUID userId, long amount, String source) {
+  private PointCommandRequest command(UUID businessId, Long userId, long amount, String source) {
     return new PointCommandRequest(businessId, userId, amount, source, null);
   }
 }

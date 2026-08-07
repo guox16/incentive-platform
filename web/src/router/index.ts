@@ -1,5 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router';
-const Home = { template: '<p>第一阶段工程骨架已就绪。</p>' };
-const Admin = { template: '<p>运营后台将在后续阶段实现。</p>' };
-export default createRouter({ history: createWebHistory(), routes: [{ path: '/', component: Home }, { path: '/admin', component: Admin, meta: { role: 'ADMIN' } }] });
 
+const RouteState = { template: '<span class="route-state" aria-hidden="true"></span>' };
+
+export default createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', redirect: '/login' },
+    { path: '/login', name: 'login', component: RouteState },
+    { path: '/register', name: 'register', component: RouteState },
+    { path: '/profile', name: 'profile', component: RouteState },
+    { path: '/points', name: 'points', component: RouteState },
+    { path: '/:pathMatch(.*)*', redirect: '/login' },
+  ],
+});

@@ -26,8 +26,8 @@ public class PointTransaction {
   @Column(name = "business_id", nullable = false, length = 64, updatable = false)
   private String businessId;
 
-  @Column(name = "user_id", nullable = false, length = 36, updatable = false)
-  private String userId;
+  @Column(name = "user_id", nullable = false, updatable = false)
+  private Long userId;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16, updatable = false)
@@ -51,9 +51,11 @@ public class PointTransaction {
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
+  /** 供 JPA 创建积分流水实体。 */
   protected PointTransaction() {}
 
-  public PointTransaction(String businessId, String userId, PointTransactionType type, long amount,
+  /** 创建一条不可修改的积分流水记录。 */
+  public PointTransaction(String businessId, Long userId, PointTransactionType type, long amount,
       long balanceBefore, long balanceAfter, String source, String remark) {
     this.id = UUID.randomUUID().toString();
     this.businessId = businessId;
@@ -67,14 +69,24 @@ public class PointTransaction {
     this.createdAt = Instant.now();
   }
 
+  /** 获取流水 ID。 */
   public String getId() { return id; }
+  /** 获取业务幂等号。 */
   public String getBusinessId() { return businessId; }
-  public String getUserId() { return userId; }
+  /** 获取用户 ID。 */
+  public Long getUserId() { return userId; }
+  /** 获取积分变动类型。 */
   public PointTransactionType getType() { return type; }
+  /** 获取积分变动数量。 */
   public long getAmount() { return amount; }
+  /** 获取变动前余额。 */
   public long getBalanceBefore() { return balanceBefore; }
+  /** 获取变动后余额。 */
   public long getBalanceAfter() { return balanceAfter; }
+  /** 获取积分来源。 */
   public String getSource() { return source; }
+  /** 获取备注信息。 */
   public String getRemark() { return remark; }
+  /** 获取流水创建时间。 */
   public Instant getCreatedAt() { return createdAt; }
 }

@@ -7,6 +7,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface PointTransactionRepository extends JpaRepository<PointTransaction, String> {
+  /** 根据业务幂等号查询积分流水。 */
   Optional<PointTransaction> findByBusinessId(String businessId);
-  Page<PointTransaction> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
+  /** 按创建时间倒序分页查询用户积分流水。 */
+  Page<PointTransaction> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
 }

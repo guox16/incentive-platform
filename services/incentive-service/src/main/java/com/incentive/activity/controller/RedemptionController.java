@@ -1,0 +1,31 @@
+package com.incentive.activity.controller;
+
+import com.incentive.activity.application.RedemptionService;
+import com.incentive.activity.dto.RedemptionResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Positive;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@Validated
+@RequestMapping("/api/v1/activities/redemptions")
+@Tag(name = "兑换")
+public class RedemptionController {
+  private final RedemptionService service;
+
+  public RedemptionController(RedemptionService service) {
+    this.service = service;
+  }
+
+  @PostMapping("/{activityCode}/items/{itemId}/users/{userId}")
+  @Operation(summary = "兑换商品")
+  public RedemptionResponse redeem(@PathVariable String activityCode,
+      @PathVariable @Positive Long itemId, @PathVariable @Positive Long userId) {
+    return service.redeem(activityCode, itemId, userId);
+  }
+}

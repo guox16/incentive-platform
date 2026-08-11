@@ -7,9 +7,12 @@ import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.dto.ActivityDetailResponse;
 import com.incentive.activity.dto.ActivitySummaryResponse;
 import com.incentive.activity.dto.LotteryPrizeResponse;
+import com.incentive.activity.dto.RedemptionItemResponse;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
+import com.incentive.activity.repository.RedemptionItemRepository;
+import com.incentive.activity.domain.RedemptionItem;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
 import java.time.Instant;
@@ -24,14 +27,16 @@ public class ActivityQueryService {
   private final IncentiveActivityRepository activityRepository;
   private final ParticipationRuleRepository ruleRepository;
   private final LotteryPrizeRepository lotteryPrizeRepository;
+  private final RedemptionItemRepository redemptionItemRepository;
   private final Clock clock;
 
   public ActivityQueryService(IncentiveActivityRepository activityRepository,
       ParticipationRuleRepository ruleRepository, LotteryPrizeRepository lotteryPrizeRepository,
-      Clock clock) {
+      RedemptionItemRepository redemptionItemRepository, Clock clock) {
     this.activityRepository = activityRepository;
     this.ruleRepository = ruleRepository;
     this.lotteryPrizeRepository = lotteryPrizeRepository;
+    this.redemptionItemRepository = redemptionItemRepository;
     this.clock = clock;
   }
 
@@ -56,9 +61,17 @@ public class ActivityQueryService {
                 prize.getPrizeName(), prize.getPrizeType(), prize.getCoverUrl(),
                 prize.getCampaignQuota(), prize.getDisplayOrder())).toList()
         : List.of();
+    List<RedemptionItemResponse> items = activity.getType() == ActivityType.REDEMPTION
+        ? redemptionItemRepository
+            .findByActivityIdAndRuleIdAndStatusOrderByDisplayOrderAscIdAsc(
+                activity.getId(), rule.getId(), RedemptionItem.Status.ACTIVE)
+            .stream().map(item -> new RedemptionItemResponse(item.getId(), item.getItemCode(),
+                item.getPrizeId(), item.getPrizeName(), item.getPrizeType(), item.getCoverUrl(),
+                item.getPointsPrice(), item.getCampaignQuota(), item.getDisplayOrder())).toList()
+        : List.of();
     return new ActivityDetailResponse(activity.getId(), activity.getCode(), activity.getType(),
         activity.getName(), activity.getStatus(), activity.getStartsAt(), activity.getEndsAt(),
-        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(), prizes);
+        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(), prizes, items);
   }
 
   public ParticipationRule findRule(Long activityId, Instant now) {

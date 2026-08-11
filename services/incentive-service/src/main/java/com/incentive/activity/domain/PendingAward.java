@@ -66,4 +66,20 @@ public class PendingAward {
     award.updatedAt = now;
     return award;
   }
+
+  public static PendingAward forRedemption(RedemptionRecord redemption, Instant now) {
+    PendingAward award = new PendingAward();
+    award.sourceType = SourceType.REDEMPTION;
+    award.sourceRecordId = redemption.getId();
+    award.userId = redemption.getUserId();
+    award.prizeId = redemption.getPrizeId();
+    award.prizeName = redemption.getPrizeName();
+    award.prizeType = redemption.getPrizeType();
+    award.awardPayload = redemption.getAwardPayload();
+    award.status = Status.PENDING;
+    award.retryCount = 0;
+    award.createdAt = now;
+    award.updatedAt = now;
+    return award;
+  }
 }

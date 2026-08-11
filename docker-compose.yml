@@ -37,6 +37,8 @@ services:
     build: { context: ., args: { MODULE: points-service } }
   incentive-service:
     build: { context: ., args: { MODULE: incentive-service } }
+    environment:
+      POINTS_SERVICE_URL: http://points-service:8082
   award-service:
     build: { context: ., args: { MODULE: award-service } }
 volumes: { mysql-data: {} }

@@ -10,6 +10,6 @@ spring:
     open-in-view: false
 clients:
   points:
-    base-url: ${POINTS_SERVICE_URL:http://points-service:8082}
+    base-url: ${POINTS_SERVICE_URL:http://localhost:8082}
 server: { port: 8085 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }

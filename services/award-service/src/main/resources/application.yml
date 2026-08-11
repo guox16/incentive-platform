@@ -1,5 +1,12 @@
 spring:
   application: { name: award-service }
   cloud: { nacos: { discovery: { server-addr: ${NACOS_ADDR:nacos:8848} } } }
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3307}/award_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+  jpa:
+    hibernate: { ddl-auto: validate }
+    open-in-view: false
 server: { port: 8084 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }

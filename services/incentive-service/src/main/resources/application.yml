@@ -11,5 +11,5 @@ spring:
 clients:
   points:
     base-url: ${POINTS_SERVICE_URL:http://points-service:8082}
-server: { port: 8083 }
+server: { port: 8085 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }

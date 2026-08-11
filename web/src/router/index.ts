@@ -10,6 +10,8 @@ export default createRouter({
     { path: '/register', name: 'register', component: RouteState },
     { path: '/profile', name: 'profile', component: RouteState },
     { path: '/points', name: 'points', component: RouteState },
+    { path: '/lottery', name: 'lottery', component: RouteState },
+    { path: '/redemption', name: 'redemption', component: RouteState },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 });

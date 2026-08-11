@@ -210,11 +210,11 @@ onMounted(loadPoints);
             <div class="activity-cards">
               <article class="activity-card">
                 <div class="activity-icon"><svg><use href="#points-gift" /></svg></div>
-                <div><h3>幸运抽奖</h3><p>使用积分，抽取惊喜好礼</p><button type="button" disabled>去抽奖 · 即将开放</button></div>
+                <div><h3>幸运抽奖</h3><p>使用积分，抽取惊喜好礼</p><button type="button" @click="router.push('/lottery')">去抽奖</button></div>
               </article>
               <article class="activity-card">
                 <div class="activity-icon"><svg><use href="#points-bag" /></svg></div>
-                <div><h3>积分兑换</h3><p>用积分兑换心仪好物</p><button type="button" disabled>去兑换 · 即将开放</button></div>
+                <div><h3>积分兑换</h3><p>用积分兑换心仪好物</p><button type="button" @click="router.push('/redemption')">去兑换</button></div>
               </article>
             </div>
           </div>
@@ -246,4 +246,6 @@ onMounted(loadPoints);
 .ledger-toolbar{display:flex;align-items:center;justify-content:space-between;padding:18px 32px 6px;color:var(--muted);font-size:12px}.filters button{min-width:58px;height:32px;color:#647087;background:transparent;border:0;border-radius:6px;font:inherit;font-size:12px;font-weight:700}.ledger-list{padding:0 32px 18px}.date-group h3{margin:22px 0 8px;color:var(--muted);font-size:12px}.date-group ul{margin:0;padding:0;list-style:none}.date-group li{display:grid;grid-template-columns:42px minmax(0,1fr) 72px 82px;align-items:center;min-height:72px;border-bottom:1px solid #e4e8ee}.record-icon{display:grid;width:30px;height:30px;place-items:center;border-radius:9px}.record-icon svg{width:16px}.record-icon.earn{color:#315e3f;background:#e2efe4}.record-icon.spend{color:#7a5c1b;background:#f9edbf}.record-copy{display:grid;gap:3px}.record-copy strong{font-size:14px}.record-copy span,.date-group time{color:var(--muted);font-size:12px}.date-group b{font-size:15px;text-align:right;font-variant-numeric:tabular-nums}.date-group b.earn{color:#237346}.date-group b.spend{color:#9a6c16}.empty-state{padding:82px 32px;color:var(--muted);text-align:center}.empty-state strong{display:block;margin-bottom:6px;color:var(--ink);font-size:16px}.empty-state p{margin:0;font-size:13px}
 footer{display:flex;gap:24px;align-items:center;padding:24px 4px 0;color:#747d90;font-size:11px}footer em{margin-left:auto;font-style:normal}.state-panel{display:grid;min-height:420px;place-content:center;justify-items:center;gap:10px;text-align:center}.state-panel strong{font-size:21px}.state-panel p{max-width:380px;margin:0;color:var(--muted);font-size:14px}.state-panel button{margin-top:8px;padding:11px 18px;color:#fff;background:var(--blue);border:0;border-radius:9px;font-weight:700}.error-state strong{color:#a23843}.loader{width:28px;height:28px;border:3px solid #c7d5ed;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.loader,.button-spinner{animation:none}.top-nav nav a,.check-in-button{transition:none}}
+.activity-card button{cursor:pointer;transition:color .18s ease,background .18s ease,transform .18s ease}.activity-card button:hover{color:#fff;background:var(--blue);transform:translateY(-1px)}.activity-card button:focus-visible{outline:3px solid rgb(23 79 167 / 28%);outline-offset:3px}
+.workspace{padding-top:20px;padding-bottom:14px}.balance-panel{min-height:180px}.balance-copy{padding:25px 44px}.balance-copy>strong{font-size:52px}.check-in-area{padding:22px 42px}.check-in-button{height:44px;margin-top:12px}.streak-copy{margin-top:7px}.content-panel{margin-top:16px}.content-header{padding:17px 28px}.activities-layout{gap:18px;padding:16px 28px 20px}.calendar-heading{padding:15px 20px 9px}.weekdays{padding:0 15px}.weekdays span{padding:5px 0}.calendar-grid{padding:0 15px 8px}.calendar-grid time{height:38px}.calendar-summary{min-height:42px}.activity-cards{gap:12px}.activity-card{grid-template-columns:70px 1fr;gap:15px;padding:17px}.activity-icon{width:66px;height:66px}.activity-icon svg{width:34px;height:34px}.activity-card p{margin:4px 0 9px}footer{padding-top:14px}
 </style>

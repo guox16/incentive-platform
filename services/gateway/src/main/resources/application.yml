@@ -13,7 +13,7 @@ spring:
           predicates:
             - Path=/api/v1/points/**
         - id: incentive
-          uri: http://localhost:8083
+          uri: http://localhost:8085
           predicates:
             - Path=/api/v1/activities/**,/api/v1/exchanges/**,/api/v1/lotteries/**
         - id: award

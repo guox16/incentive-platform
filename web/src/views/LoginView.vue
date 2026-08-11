@@ -3,6 +3,7 @@ import axios from 'axios';
 import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
+import type { ApiError, UserResponse } from '../api/types';
 
 type AuthMode = 'login' | 'register';
 
@@ -61,8 +62,8 @@ function validate() {
 
 function getRequestError(error: unknown) {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { message?: string; error?: string } | undefined;
-    return data?.message || data?.error || '服务暂时不可用，请稍后再试';
+    const data = error.response?.data as ApiError | undefined;
+    return data?.message || '服务暂时不可用，请稍后再试';
   }
   return '服务暂时不可用，请稍后再试';
 }
@@ -79,8 +80,8 @@ async function submit() {
       return;
     }
 
-    const response = await http.post('/auth/login', { identifier: form.identifier, password: form.password });
-    const user = response.data?.data ?? response.data;
+    const response = await http.post<UserResponse>('/auth/login', { identifier: form.identifier, password: form.password });
+    const user = response.data;
     if (!user?.id) throw new Error('登录响应缺少用户标识');
     sessionStorage.setItem('currentUserId', String(user.id));
     await router.push('/profile');

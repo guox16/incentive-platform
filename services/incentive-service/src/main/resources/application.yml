@@ -1,5 +1,15 @@
 spring:
   application: { name: incentive-service }
-  cloud: { nacos: { discovery: { server-addr: ${NACOS_ADDR:nacos:8848} } } }
-server: { port: 8083 }
+  cloud: { nacos: { discovery: { server-addr: "${NACOS_ADDR:localhost:8848}" } } }
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3307}/incentive_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
+  jpa:
+    hibernate: { ddl-auto: update }
+    open-in-view: false
+clients:
+  points:
+    base-url: ${POINTS_SERVICE_URL:http://localhost:8082}
+server: { port: 8085 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }

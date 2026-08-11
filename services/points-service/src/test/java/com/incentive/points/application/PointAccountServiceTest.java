@@ -18,7 +18,7 @@ import com.incentive.points.support.PointBusinessException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +29,7 @@ import org.springframework.data.domain.Pageable;
 
 @ExtendWith(MockitoExtension.class)
 class PointAccountServiceTest {
+  private static final AtomicLong BUSINESS_IDS = new AtomicLong();
   @Mock private PointAccountRepository accountRepository;
   @Mock private PointTransactionRepository transactionRepository;
   private PointAccountService service;
@@ -52,7 +53,7 @@ class PointAccountServiceTest {
   void firstCreditCreatesAccountAndLedger() {
     PointCommandRequest request = request(100, "award", "welcome");
     PointAccount account = new PointAccount(request.userId());
-    when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.empty());
+    when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
     when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
     when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -68,7 +69,7 @@ class PointAccountServiceTest {
   void exactDuplicateReturnsOriginalTransaction() {
     PointCommandRequest request = request(100, "award", "welcome");
     PointTransaction existing = transaction(request, PointTransactionType.CREDIT, "AWARD", "welcome");
-    when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.of(existing));
+    when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.of(existing));
 
     var response = service.credit(request);
 
@@ -79,9 +80,9 @@ class PointAccountServiceTest {
   @Test
   void rejectsReusedBusinessIdWithDifferentPayload() {
     PointCommandRequest request = request(100, "award", null);
-    PointTransaction existing = new PointTransaction(request.businessId().toString(), request.userId(),
+    PointTransaction existing = new PointTransaction(request.businessId(), request.userId(),
         PointTransactionType.CREDIT, 20, 0, 20, "AWARD", null);
-    when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.of(existing));
+    when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.of(existing));
 
     assertThatThrownBy(() -> service.credit(request)).isInstanceOf(PointBusinessException.class)
         .extracting("code").isEqualTo("IDEMPOTENCY_KEY_REUSED");
@@ -90,7 +91,7 @@ class PointAccountServiceTest {
   @Test
   void debitWithoutAccountIsInsufficient() {
     PointCommandRequest request = request(1, "exchange", null);
-    when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.empty());
+    when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
     when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.debit(request)).isInstanceOf(InsufficientPointsException.class);
@@ -101,7 +102,7 @@ class PointAccountServiceTest {
     PointCommandRequest request = request(40, "exchange", "order");
     PointAccount account = new PointAccount(request.userId());
     account.credit(100);
-    when(transactionRepository.findByBusinessId(request.businessId().toString())).thenReturn(Optional.empty());
+    when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
     when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
     when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -115,7 +116,7 @@ class PointAccountServiceTest {
   @Test
   void returnsPagedLedgerInRepositoryOrder() {
     Long userId = 1L;
-    PointCommandRequest request = new PointCommandRequest(UUID.randomUUID(), userId, 10, "TASK", null);
+    PointCommandRequest request = new PointCommandRequest(nextBusinessId(), userId, 10, "TASK", null);
     PointTransaction transaction = transaction(request, PointTransactionType.CREDIT, "TASK", null);
     when(transactionRepository.findByUserIdOrderByCreatedAtDesc(eq(userId), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of(transaction)));
@@ -127,11 +128,13 @@ class PointAccountServiceTest {
   }
 
   private PointCommandRequest request(long amount, String source, String remark) {
-    return new PointCommandRequest(UUID.randomUUID(), 1L, amount, source, remark);
+    return new PointCommandRequest(nextBusinessId(), 1L, amount, source, remark);
   }
 
   private PointTransaction transaction(PointCommandRequest request, PointTransactionType type, String source, String remark) {
-    return new PointTransaction(request.businessId().toString(), request.userId(), type,
+    return new PointTransaction(request.businessId(), request.userId(), type,
         request.amount(), 0, request.amount(), source, remark);
   }
+
+  private long nextBusinessId() { return BUSINESS_IDS.incrementAndGet(); }
 }

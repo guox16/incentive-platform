@@ -3,6 +3,7 @@ import axios from 'axios';
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
+import type { ApiError, UserResponse } from '../api/types';
 
 const router = useRouter();
 const showPassword = ref(false);
@@ -37,8 +38,8 @@ function validate() {
 
 function getRequestError(error: unknown) {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { message?: string; error?: string } | undefined;
-    return data?.message || data?.error || '服务暂时不可用，请稍后再试';
+    const data = error.response?.data as ApiError | undefined;
+    return data?.message || '服务暂时不可用，请稍后再试';
   }
   return '服务暂时不可用，请稍后再试';
 }
@@ -47,7 +48,13 @@ async function submit() {
   if (!validate() || loading.value) return;
   loading.value = true;
   try {
-    await http.post('/auth/register', { username: form.username, phone: form.phone, nickname: form.nickname, password: form.password });
+    const response = await http.post<UserResponse>('/auth/register', {
+      username: form.username,
+      phone: form.phone,
+      nickname: form.nickname,
+      password: form.password,
+    });
+    sessionStorage.setItem('currentUserId', String(response.data.id));
     await router.push('/profile');
   } catch (error) {
     submitError.value = getRequestError(error);

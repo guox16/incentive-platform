@@ -2,11 +2,10 @@ package com.incentive.points.dto;
 
 import com.incentive.points.domain.PointTransactionType;
 import java.time.Instant;
-import java.util.UUID;
 
 public record PointTransactionResponse(
-    UUID transactionId,
-    UUID businessId,
+    Long transactionId,
+    Long businessId,
     Long userId,
     PointTransactionType type,
     long amount,

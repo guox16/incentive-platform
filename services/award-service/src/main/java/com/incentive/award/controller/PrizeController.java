@@ -35,7 +35,7 @@ public class PrizeController {
   @GetMapping("/{id}") @Operation(summary = "查询奖品")
   public PrizeResponse get(@PathVariable Long id) { return service.get(id); }
   @GetMapping @Operation(summary = "查询奖品列表")
-  public List<PrizeResponse> list(@RequestParam(required = false) PrizeStatus status) { return service.list(status); }
+  public List<PrizeResponse> list(@RequestParam(name = "status", required = false) PrizeStatus status) { return service.list(status); }
   @PutMapping("/{id}") @Operation(summary = "修改奖品")
   public PrizeResponse update(@PathVariable Long id, @Valid @RequestBody UpdatePrizeRequest request) { return service.update(id, request); }
   @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) @Operation(summary = "软删除奖品")

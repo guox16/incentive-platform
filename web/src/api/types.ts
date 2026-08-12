@@ -88,6 +88,12 @@ export type UpdatePrizeRequest = {
   awardPayload: string | null;
 };
 
+export type AdjustPrizeInventoryRequest = {
+  businessNo: string;
+  changeAmount: number;
+  remark: string | null;
+};
+
 export type ActivitySummaryResponse = {
   id: number;
   code: string;

@@ -6,6 +6,7 @@ import ProfileView from './views/ProfileView.vue';
 import PointsView from './views/PointsView.vue';
 import LotteryView from './views/LotteryView.vue';
 import RedemptionView from './views/RedemptionView.vue';
+import AdminPrizeManagementView from './views/AdminPrizeManagementView.vue';
 
 const route = useRoute();
 
@@ -24,6 +25,7 @@ const navItems = [
   <PointsView v-else-if="route.name === 'points'" />
   <LotteryView v-else-if="route.name === 'lottery'" />
   <RedemptionView v-else-if="route.name === 'redemption'" />
+  <AdminPrizeManagementView v-else-if="route.name === 'admin-prizes'" />
   <!--
   THESIS: 会员服务档案把身份、积分与后续行动组织成一张清晰的服务记录，拒绝通用卡片仪表盘。
   OWN-WORLD: 公共服务手册式的钴蓝、纸白、暖黄与深墨色；清晰分区、编号标签和克制圆角。

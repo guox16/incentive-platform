@@ -29,7 +29,7 @@ public class ActivityController {
 
   @GetMapping("/{activityCode}")
   @Operation(summary = "查询活动详情")
-  public ActivityDetailResponse detail(@PathVariable String activityCode) {
+  public ActivityDetailResponse detail(@PathVariable("activityCode") String activityCode) {
     return service.detail(activityCode);
   }
 }

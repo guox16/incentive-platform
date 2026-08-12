@@ -55,3 +55,114 @@ export type DailyCheckInResponse = {
   balanceAfter: number | null;
   signedDates: string[];
 };
+
+export type ActivityType = 'CHECK_IN' | 'LOTTERY' | 'REDEMPTION';
+export type ActivityStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
+export type PrizeType = 'VIRTUAL' | 'POINTS' | 'NONE';
+export type PrizeStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE';
+
+export type PrizeResponse = {
+  id: number;
+  code: string;
+  name: string;
+  type: PrizeType;
+  status: PrizeStatus;
+  availableStock: number;
+  awardPayload: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreatePrizeRequest = {
+  code: string;
+  name: string;
+  type: PrizeType;
+  availableStock: number;
+  awardPayload: string | null;
+};
+
+export type UpdatePrizeRequest = {
+  name: string;
+  type: PrizeType;
+  status: PrizeStatus;
+  awardPayload: string | null;
+};
+
+export type AdjustPrizeInventoryRequest = {
+  businessNo: string;
+  changeAmount: number;
+  remark: string | null;
+};
+
+export type ActivitySummaryResponse = {
+  id: number;
+  code: string;
+  type: ActivityType;
+  name: string;
+  startsAt: string;
+  endsAt: string | null;
+};
+
+export type LotteryPrizeResponse = {
+  id: number;
+  prizeId: number;
+  name: string;
+  type: PrizeType;
+  coverUrl: string | null;
+  campaignQuota: number | null;
+  displayOrder: number;
+};
+
+export type RedemptionItemResponse = {
+  id: number;
+  itemCode: string;
+  prizeId: number;
+  name: string;
+  type: Exclude<PrizeType, 'NONE'>;
+  coverUrl: string | null;
+  pointsPrice: number;
+  campaignQuota: number | null;
+  displayOrder: number;
+};
+
+export type ActivityDetailResponse = ActivitySummaryResponse & {
+  status: ActivityStatus;
+  ruleVersion: number;
+  pointsCost: number;
+  dailyLimit: number | null;
+  prizes: LotteryPrizeResponse[];
+  items: RedemptionItemResponse[];
+};
+
+export type LotteryDrawResponse = {
+  participationId: number;
+  activityCode: string;
+  userId: number;
+  prizeId: number;
+  prizeName: string;
+  prizeType: PrizeType;
+  coverUrl: string | null;
+  won: boolean;
+  pendingAwardCreated: boolean;
+  pointsCost: number;
+  pointTransactionId: number;
+  balanceAfter: number;
+  drawnAt: string;
+};
+
+export type RedemptionResponse = {
+  redemptionId: number;
+  activityCode: string;
+  itemId: number;
+  itemCode: string;
+  userId: number;
+  prizeId: number;
+  prizeName: string;
+  prizeType: Exclude<PrizeType, 'NONE'>;
+  coverUrl: string | null;
+  pointsCost: number;
+  pointTransactionId: number;
+  balanceAfter: number;
+  pendingAwardCreated: boolean;
+  redeemedAt: string;
+};

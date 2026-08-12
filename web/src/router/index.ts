@@ -12,6 +12,7 @@ export default createRouter({
     { path: '/points', name: 'points', component: RouteState },
     { path: '/lottery', name: 'lottery', component: RouteState },
     { path: '/redemption', name: 'redemption', component: RouteState },
+    { path: '/admin/prizes', name: 'admin-prizes', component: RouteState },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 });

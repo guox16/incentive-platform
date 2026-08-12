@@ -73,12 +73,3 @@ CREATE TABLE IF NOT EXISTS award_inventory_ledger (
     CONSTRAINT chk_award_inventory_operation
         CHECK (operation_type IN ('INIT', 'INCREASE', 'DECREASE', 'RESERVE', 'RELEASE'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='奖品真实库存流水预留模型';
-
-INSERT IGNORE INTO awards
-    (code, name, award_type, status, cover_url, award_payload, total_stock, available_stock)
-VALUES
-    ('WELCOME_COUPON', '新人优惠券', 'VIRTUAL', 'ACTIVE', NULL,
-     JSON_OBJECT('templateCode', 'WELCOME_10'), 1000, 1000),
-    ('BONUS_POINTS_100', '100积分', 'POINTS', 'ACTIVE', NULL,
-     JSON_OBJECT('points', 100), 1000, 1000),
-    ('THANKS', '谢谢参与', 'NONE', 'ACTIVE', NULL, NULL, 0, 0);

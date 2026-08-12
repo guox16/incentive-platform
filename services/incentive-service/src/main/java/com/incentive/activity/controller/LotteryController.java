@@ -24,8 +24,8 @@ public class LotteryController {
 
   @PostMapping("/{activityCode}/users/{userId}/draw")
   @Operation(summary = "参与抽奖")
-  public LotteryDrawResponse draw(@PathVariable String activityCode,
-      @PathVariable @Positive Long userId) {
+  public LotteryDrawResponse draw(@PathVariable("activityCode") String activityCode,
+      @PathVariable("userId") @Positive Long userId) {
     return service.draw(activityCode, userId);
   }
 }

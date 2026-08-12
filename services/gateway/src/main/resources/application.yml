@@ -5,19 +5,19 @@ spring:
     gateway:
       routes:
         - id: user
-          uri: http://localhost:8081
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/v1/auth/**,/api/v1/users/**
         - id: points
-          uri: http://localhost:8082
+          uri: ${POINTS_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/v1/points/**
         - id: incentive
-          uri: http://localhost:8085
+          uri: ${INCENTIVE_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/v1/activities/**,/api/v1/exchanges/**,/api/v1/lotteries/**
         - id: award
-          uri: http://localhost:8084
+          uri: ${AWARD_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/v1/awards/**
 server: { port: 8080 }

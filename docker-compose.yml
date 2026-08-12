@@ -26,6 +26,12 @@ services:
   gateway:
     build: { context: ., args: { MODULE: gateway } }
     ports: ["8080:8080"]
+    environment:
+      NACOS_ADDR: nacos:8848
+      USER_SERVICE_URL: http://user-service:8081
+      POINTS_SERVICE_URL: http://points-service:8082
+      INCENTIVE_SERVICE_URL: http://incentive-service:8085
+      AWARD_SERVICE_URL: http://award-service:8084
     depends_on: { user-service: { condition: service_started }, points-service: { condition: service_started }, incentive-service: { condition: service_started }, award-service: { condition: service_started } }
   web:
     build: { context: ./web }
@@ -33,12 +39,38 @@ services:
     depends_on: { gateway: { condition: service_started } }
   user-service:
     build: { context: ., args: { MODULE: user-service } }
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-incentive}
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
   points-service:
     build: { context: ., args: { MODULE: points-service } }
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-incentive}
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
   incentive-service:
     build: { context: ., args: { MODULE: incentive-service } }
     environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-incentive}
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?set REDIS_PASSWORD}"
       POINTS_SERVICE_URL: http://points-service:8082
   award-service:
     build: { context: ., args: { MODULE: award-service } }
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-incentive}
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
 volumes: { mysql-data: {} }

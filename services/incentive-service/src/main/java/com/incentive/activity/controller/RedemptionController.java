@@ -24,8 +24,9 @@ public class RedemptionController {
 
   @PostMapping("/{activityCode}/items/{itemId}/users/{userId}")
   @Operation(summary = "兑换商品")
-  public RedemptionResponse redeem(@PathVariable String activityCode,
-      @PathVariable @Positive Long itemId, @PathVariable @Positive Long userId) {
+  public RedemptionResponse redeem(@PathVariable("activityCode") String activityCode,
+      @PathVariable("itemId") @Positive Long itemId,
+      @PathVariable("userId") @Positive Long userId) {
     return service.redeem(activityCode, itemId, userId);
   }
 }

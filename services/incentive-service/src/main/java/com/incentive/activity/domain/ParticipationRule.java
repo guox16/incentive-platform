@@ -7,6 +7,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 
@@ -49,10 +51,34 @@ public class ParticipationRule {
 
   protected ParticipationRule() {}
 
+  public ParticipationRule(Long activityId, int ruleVersion, long pointsCost,
+      Integer dailyLimit, String qualificationRule, Instant effectiveFrom) {
+    this.activityId = activityId;
+    this.ruleVersion = ruleVersion;
+    this.pointsCost = pointsCost;
+    this.dailyLimit = dailyLimit;
+    this.qualificationRule = qualificationRule;
+    this.status = Status.ACTIVE;
+    this.effectiveFrom = effectiveFrom;
+  }
+
+  @PrePersist
+  void beforeInsert() {
+    createdAt = Instant.now();
+    updatedAt = createdAt;
+  }
+
+  @PreUpdate
+  void beforeUpdate() {
+    updatedAt = Instant.now();
+  }
+
   public Long getId() { return id; }
   public Long getActivityId() { return activityId; }
   public int getRuleVersion() { return ruleVersion; }
   public long getPointsCost() { return pointsCost; }
   public Integer getDailyLimit() { return dailyLimit; }
   public String getQualificationRule() { return qualificationRule; }
+  public Status getStatus() { return status; }
+  public Instant getEffectiveFrom() { return effectiveFrom; }
 }

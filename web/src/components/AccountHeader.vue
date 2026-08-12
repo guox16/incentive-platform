@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' | 'admin-prizes' }>();
+defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' | 'admin-activities' | 'admin-prizes' }>();
 </script>
 
 <template>
@@ -10,6 +10,7 @@ defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' | 'admin-p
       <symbol id="header-gift" viewBox="0 0 24 24"><path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13M7.5 7C5 7 5 3.5 7.5 3.5c2 0 4.5 3.5 4.5 3.5s2.5-3.5 4.5-3.5C19 3.5 19 7 16.5 7"/></symbol>
       <symbol id="header-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></symbol>
       <symbol id="header-admin" viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 5v14M12 9h5M12 13h5M12 17h3"/></symbol>
+      <symbol id="header-calendar" viewBox="0 0 24 24"><path d="M4 6h16v14H4zM8 3v6M16 3v6M4 10h16"/><path d="M8 14h3M13 14h3M8 17h3"/></symbol>
     </svg>
 
     <RouterLink class="brand" to="/profile" aria-label="偶得账户中心">
@@ -30,6 +31,9 @@ defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' | 'admin-p
       </RouterLink>
       <RouterLink to="/admin/prizes" :class="{ active: active === 'admin-prizes' }">
         <svg><use href="#header-admin" /></svg><span>奖品管理</span>
+      </RouterLink>
+      <RouterLink to="/admin/activities" :class="{ active: active === 'admin-activities' }">
+        <svg><use href="#header-calendar" /></svg><span>活动管理</span>
       </RouterLink>
     </nav>
     <div class="support"><span>服务中心</span><strong>400 · 888 · 2608</strong></div>

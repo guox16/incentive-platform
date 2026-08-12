@@ -134,6 +134,31 @@ export type ActivityDetailResponse = ActivitySummaryResponse & {
   items: RedemptionItemResponse[];
 };
 
+export type AdminActivityResponse = ActivitySummaryResponse & {
+  status: ActivityStatus;
+  ruleVersion: number;
+  pointsCost: number;
+  dailyLimit: number | null;
+  qualificationRule: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateActivityRequest = {
+  code: string;
+  name: string;
+  type: Exclude<ActivityType, 'CHECK_IN'>;
+  startsAt: string;
+  endsAt: string | null;
+  pointsCost: number;
+  dailyLimit: number | null;
+  qualificationRule: string | null;
+};
+
+export type UpdateActivityRequest = Omit<CreateActivityRequest, 'code' | 'type'> & {
+  status: ActivityStatus;
+};
+
 export type LotteryDrawResponse = {
   participationId: number;
   activityCode: string;

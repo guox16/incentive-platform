@@ -1,0 +1,173 @@
+<script setup lang="ts">
+import axios from 'axios';
+import { computed, onMounted, reactive, ref } from 'vue';
+import { http } from '../api/http';
+import type { ActivityStatus, AdminActivityResponse, ApiError, CreateActivityRequest, UpdateActivityRequest } from '../api/types';
+import AccountHeader from '../components/AccountHeader.vue';
+
+type ManageableType = 'LOTTERY' | 'REDEMPTION';
+type Draft = {
+  id?: number; code: string; name: string; type: ManageableType; status: ActivityStatus;
+  startsAt: string; endsAt: string; pointsCost: number; dailyLimit: number | null;
+  qualificationRule: string;
+};
+
+const activities = ref<AdminActivityResponse[]>([]);
+const loading = ref(true);
+const saving = ref(false);
+const error = ref('');
+const formError = ref('');
+const keyword = ref('');
+const typeFilter = ref<'ALL' | ManageableType>('ALL');
+const statusFilter = ref<'ALL' | ActivityStatus>('ALL');
+const drawerOpen = ref(false);
+const draft = reactive<Draft>(blankDraft());
+
+const filteredActivities = computed(() => activities.value.filter(item => {
+  const search = keyword.value.trim().toLowerCase();
+  return (!search || item.name.toLowerCase().includes(search) || item.code.toLowerCase().includes(search))
+    && (typeFilter.value === 'ALL' || item.type === typeFilter.value)
+    && (statusFilter.value === 'ALL' || item.status === statusFilter.value);
+}));
+const activeCount = computed(() => activities.value.filter(item => item.status === 'ACTIVE').length);
+const scheduledCount = computed(() => activities.value.filter(item => new Date(item.startsAt) > new Date()).length);
+
+function blankDraft(): Draft {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  return { code: '', name: '', type: 'LOTTERY', status: 'DRAFT', startsAt: now.toISOString().slice(0, 16),
+    endsAt: '', pointsCost: 0, dailyLimit: null, qualificationRule: '' };
+}
+function message(value: unknown, fallback: string) {
+  if (axios.isAxiosError(value)) return (value.response?.data as ApiError | undefined)?.message || fallback;
+  return fallback;
+}
+function typeName(type: string) { return type === 'LOTTERY' ? '抽奖活动' : '兑换活动'; }
+function statusName(status: ActivityStatus) { return ({ DRAFT: '草稿', ACTIVE: '进行中', PAUSED: '已暂停', ENDED: '已结束' })[status]; }
+function formatDate(value: string | null) {
+  if (!value) return '长期有效';
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+function toLocalDate(value: string | null) {
+  if (!value) return '';
+  const date = new Date(value); date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+function resetFilters() { keyword.value = ''; typeFilter.value = 'ALL'; statusFilter.value = 'ALL'; }
+function openCreate() { Object.assign(draft, blankDraft()); formError.value = ''; drawerOpen.value = true; }
+function openEdit(item: AdminActivityResponse) {
+  Object.assign(draft, { id: item.id, code: item.code, name: item.name, type: item.type,
+    status: item.status, startsAt: toLocalDate(item.startsAt), endsAt: toLocalDate(item.endsAt),
+    pointsCost: item.pointsCost, dailyLimit: item.dailyLimit, qualificationRule: item.qualificationRule || '' });
+  formError.value = ''; drawerOpen.value = true;
+}
+async function loadActivities() {
+  loading.value = true; error.value = '';
+  try { activities.value = (await http.get<AdminActivityResponse[]>('/activities/admin')).data; }
+  catch (cause) { error.value = message(cause, '暂时无法获取活动列表，请稍后重试。'); }
+  finally { loading.value = false; }
+}
+function validate() {
+  if (!draft.name.trim() || (!draft.id && !draft.code.trim())) return '请填写活动名称与唯一编码。';
+  if (!draft.startsAt) return '请选择活动开始时间。';
+  if (draft.endsAt && new Date(draft.endsAt) <= new Date(draft.startsAt)) return '结束时间必须晚于开始时间。';
+  if (draft.pointsCost < 0) return '积分成本不能小于 0。';
+  if (draft.dailyLimit !== null && draft.dailyLimit < 1) return '每日参与上限至少为 1，留空表示不限。';
+  try { if (draft.qualificationRule.trim()) JSON.parse(draft.qualificationRule); }
+  catch { return '资格规则必须是合法的 JSON。'; }
+  return '';
+}
+async function save() {
+  if (saving.value) return;
+  formError.value = validate(); if (formError.value) return;
+  saving.value = true;
+  const common = { name: draft.name.trim(), startsAt: new Date(draft.startsAt).toISOString(),
+    endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : null, pointsCost: Number(draft.pointsCost),
+    dailyLimit: draft.dailyLimit === null ? null : Number(draft.dailyLimit),
+    qualificationRule: draft.qualificationRule.trim() || null };
+  try {
+    if (draft.id) {
+      const body: UpdateActivityRequest = { ...common, status: draft.status };
+      await http.put(`/activities/admin/${draft.id}`, body);
+    } else {
+      const body: CreateActivityRequest = { ...common, code: draft.code.trim().toUpperCase(), type: draft.type };
+      await http.post('/activities/admin', body);
+    }
+    drawerOpen.value = false; await loadActivities();
+  } catch (cause) { formError.value = message(cause, '保存失败，请检查填写内容后重试。'); }
+  finally { saving.value = false; }
+}
+async function setStatus(item: AdminActivityResponse, status: ActivityStatus) {
+  try {
+    const body: UpdateActivityRequest = { name: item.name, status, startsAt: item.startsAt, endsAt: item.endsAt,
+      pointsCost: item.pointsCost, dailyLimit: item.dailyLimit, qualificationRule: item.qualificationRule };
+    await http.put(`/activities/admin/${item.id}`, body); await loadActivities();
+  } catch (cause) { error.value = message(cause, '状态更新失败，请稍后重试。'); }
+}
+onMounted(loadActivities);
+</script>
+
+<template>
+  <div class="admin-page">
+    <AccountHeader active="admin-activities" />
+    <main class="admin-workspace">
+      <header class="page-head">
+        <div><p class="crumb">运营管理 <span></span> 活动管理</p><h1>活动管理</h1><p>配置抽奖与兑换活动的周期、参与成本和每日限额。</p></div>
+        <button class="primary-button" type="button" @click="openCreate">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>新建活动
+        </button>
+      </header>
+
+      <section class="overview" aria-label="活动概览">
+        <div><span>全部活动</span><strong>{{ activities.length }}</strong><small>抽奖与兑换活动</small></div>
+        <div><span>正在进行</span><strong>{{ activeCount }}</strong><small>状态已设为进行中</small></div>
+        <div><span>等待开始</span><strong>{{ scheduledCount }}</strong><small>开始时间尚未到达</small></div>
+        <p>活动进入“进行中”后，仍需处于设定周期内，用户端才会展示并允许参与。</p>
+      </section>
+
+      <section class="filter-bar" aria-label="活动筛选">
+        <label class="search"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input v-model="keyword" aria-label="搜索活动" placeholder="搜索活动名称 / 编码" /></label>
+        <select v-model="typeFilter" aria-label="活动类型"><option value="ALL">全部活动类型</option><option value="LOTTERY">抽奖活动</option><option value="REDEMPTION">兑换活动</option></select>
+        <select v-model="statusFilter" aria-label="活动状态"><option value="ALL">全部状态</option><option value="DRAFT">草稿</option><option value="ACTIVE">进行中</option><option value="PAUSED">已暂停</option><option value="ENDED">已结束</option></select>
+        <button class="secondary-button" type="button" @click="resetFilters">重置筛选</button>
+      </section>
+
+      <p v-if="error" class="notice" role="alert">{{ error }} <button type="button" @click="loadActivities">重新加载</button></p>
+      <section v-if="!error" class="table-panel" aria-live="polite">
+        <div v-if="loading" class="state">正在同步活动数据…</div>
+        <div v-else-if="!filteredActivities.length" class="state"><strong>没有符合条件的活动</strong><span>调整筛选条件，或创建一个新活动。</span></div>
+        <table v-else>
+          <thead><tr><th>活动信息</th><th>活动周期</th><th>参与规则</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
+          <tbody><tr v-for="item in filteredActivities" :key="item.id">
+            <td><div class="activity-info"><span :class="['type-mark', item.type.toLowerCase()]"><svg v-if="item.type === 'LOTTERY'" viewBox="0 0 24 24"><path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13M7.5 7C5 7 5 3.5 7.5 3.5c2 0 4.5 3.5 4.5 3.5s2.5-3.5 4.5-3.5C19 3.5 19 7 16.5 7"/></svg><svg v-else viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg></span><div><strong>{{ item.name }}</strong><small>{{ item.code }} · {{ typeName(item.type) }}</small></div></div></td>
+            <td class="period"><strong>{{ formatDate(item.startsAt) }}</strong><small>至 {{ formatDate(item.endsAt) }}</small></td>
+            <td><div class="rule"><strong>{{ item.type === 'LOTTERY' ? `${item.pointsCost} 积分 / 次` : '按商品定价' }}</strong><small>{{ item.dailyLimit ? `每日最多 ${item.dailyLimit} 次` : '每日不限次数' }} · v{{ item.ruleVersion }}</small></div></td>
+            <td><span :class="['status', item.status.toLowerCase()]">{{ statusName(item.status) }}</span></td>
+            <td class="date">{{ formatDate(item.updatedAt) }}</td>
+            <td class="actions"><button type="button" @click="openEdit(item)">编辑</button><button v-if="item.status !== 'ACTIVE'" type="button" @click="setStatus(item, 'ACTIVE')">启用</button><button v-else type="button" @click="setStatus(item, 'PAUSED')">暂停</button></td>
+          </tr></tbody>
+        </table>
+        <footer v-if="!loading && filteredActivities.length"><span>共 {{ filteredActivities.length }} 项</span><span>参与规则发生变化时自动保留新版本</span></footer>
+      </section>
+    </main>
+
+    <div v-if="drawerOpen" class="drawer-mask" @click.self="drawerOpen = false">
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="activity-drawer-title">
+        <header><div><span>{{ draft.id ? '编辑活动' : '新建活动' }}</span><h2 id="activity-drawer-title">{{ draft.id ? draft.name : '创建活动与首版规则' }}</h2></div><button type="button" aria-label="关闭" @click="drawerOpen = false"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+        <div class="drawer-body">
+          <label><span>活动名称 <b>*</b></span><input v-model="draft.name" maxlength="100" placeholder="例如：夏日幸运抽奖" /></label>
+          <div class="field-row"><label><span>活动编码 <b>*</b></span><input v-model="draft.code" :disabled="!!draft.id" maxlength="64" placeholder="SUMMER_DRAW" /><small>仅支持大写字母、数字与下划线</small></label><label><span>活动类型</span><select v-model="draft.type" :disabled="!!draft.id"><option value="LOTTERY">抽奖活动</option><option value="REDEMPTION">兑换活动</option></select></label></div>
+          <div class="field-row"><label><span>开始时间 <b>*</b></span><input v-model="draft.startsAt" type="datetime-local" /></label><label><span>结束时间</span><input v-model="draft.endsAt" type="datetime-local" /><small>留空表示长期有效</small></label></div>
+          <label v-if="draft.id"><span>活动状态</span><select v-model="draft.status"><option value="DRAFT">草稿</option><option value="ACTIVE">进行中</option><option value="PAUSED">已暂停</option><option value="ENDED">已结束</option></select></label>
+          <fieldset><legend>参与规则</legend><p>规则字段修改后将创建新版本，已有参与记录继续关联原版本。</p><div class="field-row"><label><span>单次积分成本</span><input v-model.number="draft.pointsCost" type="number" min="0" :disabled="draft.type === 'REDEMPTION'" /><small>{{ draft.type === 'REDEMPTION' ? '兑换积分由具体商品决定' : '设为 0 表示免费参与' }}</small></label><label><span>每日参与上限</span><input v-model.number="draft.dailyLimit" type="number" min="1" placeholder="不限" /><small>留空表示不限次数</small></label></div><label><span>资格规则（JSON）</span><textarea v-model="draft.qualificationRule" rows="6" placeholder='{"memberLevel":"GOLD"}'></textarea><small>可留空；用于后续人群、时段等资格扩展。</small></label></fieldset>
+          <p v-if="formError" class="notice" role="alert">{{ formError }}</p>
+        </div>
+        <footer><button class="secondary-button" type="button" :disabled="saving" @click="drawerOpen = false">取消</button><button class="primary-button" type="button" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存活动' }}</button></footer>
+      </aside>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.admin-page{--blue:#174fa7;--navy:#102f65;--yellow:#f1c84a;--paper:#f8f7f2;--ink:#17213a;--muted:#697287;--line:#d7dde6;min-width:1180px;min-height:100vh;padding-top:74px;color:var(--ink);background:#e8edf3;font-size:13px}.admin-page :deep(.account-header){position:fixed;inset:0 0 auto;z-index:8}.admin-workspace{width:min(1370px,calc(100% - 96px));margin:auto;padding:38px 0}.page-head{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:24px;border-bottom:1px solid var(--line)}.page-head h1{margin:9px 0 4px;font-size:34px;letter-spacing:-.025em}.page-head p{margin:0;color:var(--muted)}.crumb{font-size:12px}.crumb span{display:inline-block;width:4px;height:4px;margin:0 8px 2px;background:#a6b0bf;border-radius:50%}button,input,select,textarea{font:inherit}button{cursor:pointer}.primary-button,.secondary-button{display:inline-flex;min-height:42px;align-items:center;justify-content:center;gap:8px;padding:0 17px;border:0;border-radius:9px;font-weight:800}.primary-button{color:#fff;background:var(--blue);box-shadow:0 8px 18px rgb(23 79 167 / 18%)}.primary-button svg{width:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}.secondary-button{color:#536079;background:#e9edf2}.overview{display:grid;grid-template-columns:repeat(3,170px) 1fr;gap:0;margin:22px 0 16px;padding:18px 22px;background:var(--navy);border-radius:16px;box-shadow:0 12px 30px rgb(31 54 94 / 14%)}.overview>div{display:grid;padding:0 22px;border-right:1px solid rgb(255 255 255 / 16%)}.overview>div:first-child{padding-left:0}.overview span,.overview small{color:#aebfdb}.overview strong{color:#fff;font-size:26px;line-height:1.3;font-variant-numeric:tabular-nums}.overview small{font-size:10px}.overview p{align-self:center;max-width:54ch;margin:0 0 0 28px;color:#d5e0f1;line-height:1.7}.filter-bar{display:flex;align-items:center;gap:10px;padding:14px 18px;background:var(--paper);border-radius:12px;box-shadow:0 7px 20px rgb(38 50 75 / 6%)}.search{display:flex;height:40px;align-items:center;gap:8px;flex:1;max-width:390px;padding:0 12px;background:#fff;border:1px solid var(--line);border-radius:8px}.search svg{width:17px;fill:none;stroke:#768297;stroke-width:1.8;stroke-linecap:round}.search input{width:100%;border:0;outline:0;color:var(--ink)}select,input,textarea{color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px}select{height:40px;padding:0 32px 0 11px}.table-panel{margin-top:16px;overflow:hidden;background:var(--paper);border-radius:16px;box-shadow:0 10px 28px rgb(38 50 75 / 9%)}table{width:100%;border-collapse:collapse}th,td{padding:15px 13px;text-align:left;border-bottom:1px solid #e4e8ee}th{color:var(--muted);background:#f2f4f7;font-size:11px}th:first-child,td:first-child{padding-left:20px}.activity-info{display:flex;align-items:center;gap:11px}.type-mark{display:grid;width:38px;height:38px;place-items:center;color:#fff;background:var(--blue);border-radius:9px 9px 4px 9px}.type-mark.redemption{color:var(--navy);background:var(--yellow)}.type-mark svg{width:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.activity-info strong,.activity-info small,.period strong,.period small,.rule strong,.rule small{display:block}.activity-info small,.period small,.rule small{margin-top:3px;color:var(--muted);font-size:10px}.period strong,.rule strong{font-size:12px}.status{display:inline-block;padding:4px 8px;border-radius:5px;font-size:11px;font-weight:700}.status.active{color:#315e3f;background:#e2efe4}.status.draft{color:#835f0c;background:#fff2c5}.status.paused{color:#7c4b19;background:#f7e8d8}.status.ended{color:#687286;background:#e6e9ee}.date{color:var(--muted);font-size:11px}.actions{white-space:nowrap}.actions button{padding:7px 10px;color:var(--blue);background:#e2ebfa;border:0;border-radius:6px;font-size:12px;font-weight:700}.actions button+button{margin-left:7px;color:#536079;background:#edf0f4}.table-panel footer{display:flex;justify-content:space-between;padding:14px 20px;color:var(--muted);font-size:11px}.state{display:grid;min-height:280px;place-content:center;gap:6px;color:var(--muted);text-align:center}.state strong{color:var(--ink);font-size:16px}.notice{margin:14px 0;padding:10px 12px;color:#a23843;background:#f8e9eb;border-radius:8px}.notice button{margin-left:7px;color:inherit;background:transparent;border:0;text-decoration:underline}.drawer-mask{position:fixed;inset:0;z-index:10;background:rgb(16 31 56 / 42%)}.drawer{position:absolute;inset:0 0 0 auto;display:flex;width:540px;flex-direction:column;background:var(--paper);box-shadow:-18px 0 40px rgb(16 31 56 / 18%)}.drawer>header{display:flex;align-items:start;justify-content:space-between;padding:26px 30px 20px;border-bottom:1px solid var(--line)}.drawer>header span{color:var(--blue);font-size:12px;font-weight:800}.drawer h2{margin:5px 0 0;font-size:22px}.drawer>header button{display:grid;width:34px;height:34px;place-items:center;color:var(--muted);background:transparent;border:0;border-radius:6px}.drawer>header svg{width:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.drawer-body{display:grid;gap:17px;overflow:auto;padding:24px 30px}.drawer label{display:grid;gap:7px}.drawer label>span{font-size:12px;font-weight:800}.drawer label b{color:#a23843}.drawer input,.drawer textarea,.drawer select{width:100%;padding:0 11px}.drawer input{height:40px}.drawer textarea{padding:10px 11px;line-height:1.5;resize:vertical}.drawer small{color:var(--muted);font-size:10px;line-height:1.5}.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.drawer fieldset{display:grid;gap:14px;margin:0;padding:17px;border:1px solid var(--line);border-radius:12px}.drawer legend{padding:0 6px;color:var(--blue);font-size:12px;font-weight:800}.drawer fieldset>p{margin:0;color:var(--muted);font-size:11px;line-height:1.6}.drawer>footer{display:flex;justify-content:flex-end;gap:10px;margin-top:auto;padding:17px 30px;border-top:1px solid var(--line)}.drawer>footer .primary-button{min-width:112px}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid rgb(23 79 167 / 18%);outline-offset:2px}.primary-button:disabled,.secondary-button:disabled{opacity:.65;cursor:not-allowed}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>

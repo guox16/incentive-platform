@@ -105,7 +105,11 @@ class PointServiceMySqlIntegrationTest {
           () -> service.credit(request),
           () -> service.credit(request));
       var results = executor.invokeAll(duplicateTasks);
-      for (var result : results) assertThat(result.get().balanceAfter()).isEqualTo(5);
+      var responses = new ArrayList<PointTransactionResponse>();
+      for (var result : results) responses.add(result.get());
+      assertThat(responses).allSatisfy(response -> assertThat(response.balanceAfter()).isEqualTo(5));
+      assertThat(responses).extracting(PointTransactionResponse::replayed)
+          .containsExactlyInAnyOrder(false, true);
     } finally {
       executor.shutdownNow();
     }

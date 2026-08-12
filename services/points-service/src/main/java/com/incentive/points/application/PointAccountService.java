@@ -17,6 +17,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 积分账户的命令和查询入口，统一维护事务、行锁与幂等语义。 */
@@ -49,15 +50,18 @@ public class PointAccountService {
         result.getTotalElements(), result.getTotalPages());
   }
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   /** 为用户增加积分，并保证业务号幂等。 */
   public PointTransactionResponse credit(PointCommandRequest request) {
     NormalizedCommand command = normalize(request, PointTransactionType.CREDIT);
     PointTransaction existing = findExisting(command);
     if (existing != null) return toResponse(existing, true);
 
-    // INSERT IGNORE 只承担并发首次建账；随后仍通过行锁串行化实际余额变更。
-    accountRepository.createIfAbsent(command.userId(), Instant.now());
+    // 只在未建账时执行幂等插入。已存在账户直接获取行锁，避免
+    // INSERT IGNORE 的重复键锁与后续 FOR UPDATE 发生锁升级竞争。
+    if (!accountRepository.existsById(command.userId())) {
+      accountRepository.createIfAbsent(command.userId(), Instant.now());
+    }
     PointAccount account = accountRepository.findByUserIdForUpdate(command.userId())
         .orElseThrow(() -> new IllegalStateException("积分账户创建后未找到"));
     existing = findExisting(command);
@@ -72,7 +76,7 @@ public class PointAccountService {
     return saveTransaction(command, before, account.getBalance());
   }
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   /** 扣减用户积分，并保证业务号幂等和余额充足。 */
   public PointTransactionResponse debit(PointCommandRequest request) {
     NormalizedCommand command = normalize(request, PointTransactionType.DEBIT);

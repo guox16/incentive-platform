@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.incentive.points.domain.InsufficientPointsException;
@@ -54,6 +55,7 @@ class PointAccountServiceTest {
     PointCommandRequest request = request(100, "award", "welcome");
     PointAccount account = new PointAccount(request.userId());
     when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
+    when(accountRepository.existsById(request.userId())).thenReturn(false);
     when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
     when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -63,6 +65,22 @@ class PointAccountServiceTest {
     assertThat(response.balanceAfter()).isEqualTo(100);
     assertThat(response.source()).isEqualTo("AWARD");
     verify(accountRepository).createIfAbsent(eq(request.userId()), any(Instant.class));
+  }
+
+  @Test
+  void creditToExistingAccountSkipsIdempotentInsert() {
+    PointCommandRequest request = request(10, "task", null);
+    PointAccount account = new PointAccount(request.userId());
+    when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
+    when(accountRepository.existsById(request.userId())).thenReturn(true);
+    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
+    when(transactionRepository.saveAndFlush(any(PointTransaction.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    service.credit(request);
+
+    verify(accountRepository, never()).createIfAbsent(eq(request.userId()), any(Instant.class));
+    verify(accountRepository).findByUserIdForUpdate(request.userId());
   }
 
   @Test

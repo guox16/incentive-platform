@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ active: 'profile' | 'points' }>();
+defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' }>();
 </script>
 
 <template>
@@ -21,12 +21,12 @@ defineProps<{ active: 'profile' | 'points' }>();
       <RouterLink to="/points" :class="{ active: active === 'points' }">
         <svg><use href="#header-points" /></svg><span>积分明细</span>
       </RouterLink>
-      <a href="#" aria-disabled="true" @click.prevent>
+      <RouterLink to="/lottery" :class="{ active: active === 'lottery' }">
         <svg><use href="#header-gift" /></svg><span>幸运抽奖</span>
-      </a>
-      <a href="#" aria-disabled="true" @click.prevent>
+      </RouterLink>
+      <RouterLink to="/redemption" :class="{ active: active === 'redemption' }">
         <svg><use href="#header-bag" /></svg><span>兑换商城</span>
-      </a>
+      </RouterLink>
     </nav>
     <div class="support"><span>服务中心</span><strong>400 · 888 · 2608</strong></div>
   </header>

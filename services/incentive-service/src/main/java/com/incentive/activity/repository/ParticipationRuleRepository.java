@@ -9,4 +9,6 @@ public interface ParticipationRuleRepository extends JpaRepository<Participation
   Optional<ParticipationRule>
       findFirstByActivityIdAndStatusAndEffectiveFromLessThanEqualOrderByRuleVersionDesc(
           Long activityId, ParticipationRule.Status status, Instant now);
+
+  Optional<ParticipationRule> findFirstByActivityIdOrderByRuleVersionDesc(Long activityId);
 }

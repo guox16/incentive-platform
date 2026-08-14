@@ -13,6 +13,7 @@ export default createRouter({
     { path: '/lottery', name: 'lottery', component: RouteState },
     { path: '/redemption', name: 'redemption', component: RouteState },
     { path: '/admin/prizes', name: 'admin-prizes', component: RouteState },
+    { path: '/admin/activities', name: 'admin-activities', component: RouteState },
     { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 });

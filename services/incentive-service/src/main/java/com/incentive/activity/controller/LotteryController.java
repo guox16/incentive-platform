@@ -9,6 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -22,10 +23,10 @@ public class LotteryController {
     this.service = service;
   }
 
-  @PostMapping("/{activityCode}/users/{userId}/draw")
+  @PostMapping("/{activityCode}/draw")
   @Operation(summary = "参与抽奖")
   public LotteryDrawResponse draw(@PathVariable("activityCode") String activityCode,
-      @PathVariable("userId") @Positive Long userId) {
+      @RequestHeader("X-User-Id") @Positive Long userId) {
     return service.draw(activityCode, userId);
   }
 }

@@ -1,6 +1,6 @@
 # 用户激励平台
 
-面向面试展示的后端优先微服务项目。当前已完成工程骨架、基础用户账户以及积分余额、加减、流水和幂等能力；JWT、活动与发奖业务仍待实现。
+面向面试展示的后端优先微服务项目。当前已完成工程骨架、基础用户账户、JWT 登录，以及积分余额、加减、流水和幂等能力。
 
 ## 结构
 
@@ -16,7 +16,7 @@
 
 完整的命令、接口验证、数据卷管理和故障排查见 [Docker 操作指南](docs/docker-operation-guide.md)。
 
-1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env` 并替换所有示例密码。
+1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env`，替换所有示例密码，并将 `JWT_SECRET` 设置为至少 32 个字符的随机密钥。
 2. 执行 `docker compose up -d mysql redis rabbitmq nacos` 启动开发依赖。
 3. 按 Docker 操作指南在本机启动用户服务和积分服务；RabbitMQ 管理台为 `http://localhost:15672`，Nacos 为 `http://localhost:8848/nacos`。
 
@@ -29,6 +29,7 @@
 用户服务的代码阅读顺序、业务调用链、调试方法和练习题见 [用户模块学习指南](docs/user-module-learning-guide.md)。
 
 - 对外 API 固定使用 `/api/v1` 前缀；命令接口必须支持幂等键。
+- 登录成功后使用 `Authorization: Bearer <accessToken>` 请求受保护接口；用户自身资源统一使用 `/me` 路径，不从 URL 接收用户 ID。
 - 每个服务只拥有自己的数据库，禁止跨库查询和外键。
 - 所有 HTTP 响应透传或生成 `X-Trace-Id`；错误格式统一为 `code`、`message`、`traceId`、`timestamp`。
 - 业务实现放在各服务内；`common` 仅保留真正跨服务且稳定的技术契约，避免形成共享业务模型。
@@ -36,4 +37,4 @@
 
 ## 下一阶段
 
-补齐 JWT、Refresh Token、`USER`/`ADMIN` 角色和 Vue 登录守卫，然后进入兑换活动闭环。
+补齐 Refresh Token、令牌撤销和 `USER`/`ADMIN` 权限控制，再加强服务间身份校验。

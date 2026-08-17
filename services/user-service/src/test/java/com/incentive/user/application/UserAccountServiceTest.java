@@ -10,6 +10,8 @@ import com.incentive.user.dto.LoginRequest;
 import com.incentive.user.dto.RegisterRequest;
 import com.incentive.user.dto.UpdateProfileRequest;
 import com.incentive.user.repository.UserAccountRepository;
+import com.incentive.user.security.IssuedAccessToken;
+import com.incentive.user.security.JwtTokenService;
 import com.incentive.user.support.UserBusinessException;
 import java.time.Instant;
 import java.util.Optional;
@@ -24,10 +26,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class UserAccountServiceTest {
   @Mock private UserAccountRepository repository;
+  @Mock private JwtTokenService jwtTokenService;
   private UserAccountService service;
 
   @BeforeEach
-  void setUp() { service = new UserAccountService(repository, new BCryptPasswordEncoder()); }
+  void setUp() { service = new UserAccountService(repository, new BCryptPasswordEncoder(), jwtTokenService); }
 
   @Test
   void registersAccountWithHashedPassword() {
@@ -61,8 +64,12 @@ class UserAccountServiceTest {
   void returnsProfileForCorrectPassword() {
     UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
     when(repository.findByUsernameOrPhone("alice", "alice")).thenReturn(Optional.of(account));
+    when(jwtTokenService.issue(1L)).thenReturn(new IssuedAccessToken("signed-token", 900));
 
-    assertThat(service.login(new LoginRequest("alice", "secret12")).username()).isEqualTo("alice");
+    var response = service.login(new LoginRequest("alice", "secret12"));
+    assertThat(response.user().username()).isEqualTo("alice");
+    assertThat(response.accessToken()).isEqualTo("signed-token");
+    assertThat(response.expiresIn()).isEqualTo(900);
   }
 
   @Test
@@ -101,8 +108,9 @@ class UserAccountServiceTest {
   void logsInWithPhoneNumber() {
     UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
     when(repository.findByUsernameOrPhone("13800138000", "13800138000")).thenReturn(Optional.of(account));
+    when(jwtTokenService.issue(1L)).thenReturn(new IssuedAccessToken("signed-token", 900));
 
-    assertThat(service.login(new LoginRequest("13800138000", "secret12")).username()).isEqualTo("alice");
+    assertThat(service.login(new LoginRequest("13800138000", "secret12")).user().username()).isEqualTo("alice");
   }
 
   @Test

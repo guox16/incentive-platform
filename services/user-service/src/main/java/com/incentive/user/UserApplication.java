@@ -1,6 +1,7 @@
 package com.incentive.user;
 
 import com.incentive.common.trace.TraceIdFilter;
+import java.time.Clock;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -25,5 +26,10 @@ public class UserApplication {
   PasswordEncoder passwordEncoder() {
     // 即使暂不引入 JWT，也不能以明文形式保存演示账户的密码。
     return new BCryptPasswordEncoder();
+  }
+
+  @Bean
+  Clock systemClock() {
+    return Clock.systemUTC();
   }
 }

@@ -134,6 +134,13 @@ export type ActivityDetailResponse = ActivitySummaryResponse & {
   items: RedemptionItemResponse[];
 };
 
+export type LoginResponse = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  user: UserResponse;
+};
+
 export type AdminActivityResponse = ActivitySummaryResponse & {
   status: ActivityStatus;
   ruleVersion: number;

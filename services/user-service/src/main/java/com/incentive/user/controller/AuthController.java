@@ -2,6 +2,7 @@ package com.incentive.user.controller;
 
 import com.incentive.user.application.UserAccountService;
 import com.incentive.user.dto.LoginRequest;
+import com.incentive.user.dto.LoginResponse;
 import com.incentive.user.dto.RegisterRequest;
 import com.incentive.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@Tag(name = "认证", description = "本阶段只提供注册与无状态登录校验")
+@Tag(name = "认证", description = "提供注册与 JWT 登录")
 public class AuthController {
   private final UserAccountService service;
   /** 创建认证控制器。 */
@@ -31,5 +32,5 @@ public class AuthController {
   /** 接收用户登录凭证校验请求。 */
   @PostMapping("/login")
   @Operation(summary = "校验登录凭证")
-  public UserResponse login(@Valid @RequestBody LoginRequest request) { return service.login(request); }
+  public LoginResponse login(@Valid @RequestBody LoginRequest request) { return service.login(request); }
 }

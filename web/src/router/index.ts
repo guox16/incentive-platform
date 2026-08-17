@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { getAccessToken } from '../api/auth';
 
 const RouteState = { template: '<span class="route-state" aria-hidden="true"></span>' };
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/login' },
@@ -17,3 +18,12 @@ export default createRouter({
     { path: '/:pathMatch(.*)*', redirect: '/login' },
   ],
 });
+
+router.beforeEach(to => {
+  const publicRoutes = new Set(['login', 'register']);
+  if (!publicRoutes.has(String(to.name)) && !getAccessToken()) return { name: 'login' };
+  if (publicRoutes.has(String(to.name)) && getAccessToken()) return { name: 'profile' };
+  return true;
+});
+
+export default router;

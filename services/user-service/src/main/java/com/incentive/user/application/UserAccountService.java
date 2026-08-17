@@ -2,10 +2,12 @@ package com.incentive.user.application;
 
 import com.incentive.user.domain.UserAccount;
 import com.incentive.user.dto.LoginRequest;
+import com.incentive.user.dto.LoginResponse;
 import com.incentive.user.dto.RegisterRequest;
 import com.incentive.user.dto.UpdateProfileRequest;
 import com.incentive.user.dto.UserResponse;
 import com.incentive.user.repository.UserAccountRepository;
+import com.incentive.user.security.JwtTokenService;
 import com.incentive.user.support.UserBusinessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -19,11 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserAccountService {
   private final UserAccountRepository repository;
   private final PasswordEncoder passwordEncoder;
+  private final JwtTokenService jwtTokenService;
 
   /** 创建用户账户应用服务。 */
-  public UserAccountService(UserAccountRepository repository, PasswordEncoder passwordEncoder) {
+  public UserAccountService(UserAccountRepository repository, PasswordEncoder passwordEncoder,
+      JwtTokenService jwtTokenService) {
     this.repository = repository;
     this.passwordEncoder = passwordEncoder;
+    this.jwtTokenService = jwtTokenService;
   }
 
   @Transactional
@@ -48,15 +53,15 @@ public class UserAccountService {
   }
 
   /** 校验用户登录凭证并返回用户资料。 */
-  public UserResponse login(LoginRequest request) {
+  public LoginResponse login(LoginRequest request) {
     String identifier = request.identifier().trim();
     UserAccount account = repository.findByUsernameOrPhone(identifier, identifier)
         .orElseThrow(this::invalidCredentials);
     if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
       throw invalidCredentials();
     }
-    // 本轮仅做凭证校验，不创建 Session，也不签发 JWT。
-    return toResponse(account);
+    var issuedToken = jwtTokenService.issue(account.getId());
+    return new LoginResponse(issuedToken.value(), "Bearer", issuedToken.expiresInSeconds(), toResponse(account));
   }
 
   /** 查询指定用户的资料。 */

@@ -25,7 +25,8 @@ class PointQueryControllerTest {
     when(service.getTransactions(1L, 2, 30))
         .thenReturn(new PointTransactionPageResponse(List.of(), 2, 30, 0, 0));
 
-    mockMvc.perform(get("/api/v1/points/users/1/transactions")
+    mockMvc.perform(get("/api/v1/points/me/transactions")
+            .header("X-User-Id", "1")
             .queryParam("page", "2")
             .queryParam("size", "30"))
         .andExpect(status().isOk())

@@ -6,17 +6,14 @@ import com.incentive.user.dto.UserResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 本阶段没有认证上下文，因此按 ID 查询/修改只可用于本地演示。
- * 接入 JWT 后必须改为从可信身份上下文取得用户 ID 并校验资源归属。
- */
 @RestController
 @RequestMapping("/api/v1/users")
 @Tag(name = "用户资料")
@@ -26,14 +23,18 @@ public class UserController {
   public UserController(UserAccountService service) { this.service = service; }
 
   /** 查询指定用户的公开资料。 */
-  @GetMapping("/{id}")
+  @GetMapping("/me")
   @Operation(summary = "查询用户资料")
-  public UserResponse getProfile(@PathVariable("id") Long id) { return service.getProfile(id); }
+  public UserResponse getProfile(
+      @RequestHeader("X-User-Id") @Positive Long userId) {
+    return service.getProfile(userId);
+  }
 
   /** 更新指定用户的昵称资料。 */
-  @PutMapping("/{id}")
+  @PutMapping("/me")
   @Operation(summary = "修改昵称")
-  public UserResponse updateProfile(@PathVariable("id") Long id, @Valid @RequestBody UpdateProfileRequest request) {
-    return service.updateProfile(id, request);
+  public UserResponse updateProfile(@RequestHeader("X-User-Id") @Positive Long userId,
+      @Valid @RequestBody UpdateProfileRequest request) {
+    return service.updateProfile(userId, request);
   }
 }

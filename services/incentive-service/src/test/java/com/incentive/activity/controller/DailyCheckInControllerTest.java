@@ -22,12 +22,13 @@ class DailyCheckInControllerTest {
   @MockBean private DailyCheckInService service;
 
   @Test
-  void bindsUserIdByItsPathVariableName() throws Exception {
+  void bindsAuthenticatedUserIdFromTrustedHeader() throws Exception {
     when(service.getStatus(1L)).thenReturn(new DailyCheckInResponse(
         1L, LocalDate.of(2026, 8, 7), false, 0, 10, "AVAILABLE",
         null, null, null, List.of()));
 
-    mockMvc.perform(get("/api/v1/activities/check-ins/users/1"))
+    mockMvc.perform(get("/api/v1/activities/check-ins/me")
+            .header("X-User-Id", "1"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.userId").value(1))
         .andExpect(jsonPath("$.rewardStatus").value("AVAILABLE"));

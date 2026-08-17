@@ -91,12 +91,10 @@ async function loadPoints() {
   loading.value = true;
   error.value = '';
   try {
-    const userId = sessionStorage.getItem('currentUserId');
-    if (!userId) { await router.replace('/login'); return; }
     const [balanceResponse, transactionsResponse, checkInResponse] = await Promise.all([
-      http.get<PointBalanceResponse>(`/points/users/${userId}/balance`),
-      http.get<PointTransactionPageResponse>(`/points/users/${userId}/transactions`, { params: { page: 0, size: 100 } }),
-      http.get<DailyCheckInResponse>(`/activities/check-ins/users/${userId}`),
+      http.get<PointBalanceResponse>('/points/me/balance'),
+      http.get<PointTransactionPageResponse>('/points/me/transactions', { params: { page: 0, size: 100 } }),
+      http.get<DailyCheckInResponse>('/activities/check-ins/me'),
     ]);
     balance.value = balanceResponse.data.balance;
     records.value = transactionsResponse.data.items.map(toPointRecord);
@@ -111,18 +109,16 @@ async function loadPoints() {
 
 async function performCheckIn() {
   if (checkingIn.value || checkedInToday.value) return;
-  const userId = sessionStorage.getItem('currentUserId');
-  if (!userId) { await router.replace('/login'); return; }
   checkingIn.value = true;
   checkInError.value = '';
   checkInFeedback.value = '';
   try {
-    const response = await http.post<DailyCheckInResponse>(`/activities/check-ins/users/${userId}`);
+    const response = await http.post<DailyCheckInResponse>('/activities/check-ins/me');
     checkIn.value = response.data;
     if (response.data.balanceAfter !== null) balance.value = response.data.balanceAfter;
     const [balanceResponse, transactionsResponse] = await Promise.all([
-      http.get<PointBalanceResponse>(`/points/users/${userId}/balance`),
-      http.get<PointTransactionPageResponse>(`/points/users/${userId}/transactions`, { params: { page: 0, size: 100 } }),
+      http.get<PointBalanceResponse>('/points/me/balance'),
+      http.get<PointTransactionPageResponse>('/points/me/transactions', { params: { page: 0, size: 100 } }),
     ]);
     balance.value = balanceResponse.data.balance;
     records.value = transactionsResponse.data.items.map(toPointRecord);

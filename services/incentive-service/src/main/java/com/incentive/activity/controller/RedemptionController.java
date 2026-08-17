@@ -9,6 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -22,11 +23,11 @@ public class RedemptionController {
     this.service = service;
   }
 
-  @PostMapping("/{activityCode}/items/{itemId}/users/{userId}")
+  @PostMapping("/{activityCode}/items/{itemId}")
   @Operation(summary = "兑换商品")
   public RedemptionResponse redeem(@PathVariable("activityCode") String activityCode,
       @PathVariable("itemId") @Positive Long itemId,
-      @PathVariable("userId") @Positive Long userId) {
+      @RequestHeader("X-User-Id") @Positive Long userId) {
     return service.redeem(activityCode, itemId, userId);
   }
 }

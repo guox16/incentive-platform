@@ -23,21 +23,22 @@ class UserControllerTest {
   @MockBean private UserAccountService service;
 
   @Test
-  void getsProfileUsingTheIdFromTheRequestPath() throws Exception {
+  void getsProfileUsingTheTrustedIdentityHeader() throws Exception {
     Long id = 1L;
     when(service.getProfile(id)).thenReturn(new UserResponse(id, "user", "13800138000", "name", null, null));
 
-    mockMvc.perform(get("/api/v1/users/{id}", id))
+    mockMvc.perform(get("/api/v1/users/me").header("X-User-Id", id))
         .andExpect(status().isOk());
   }
 
   @Test
-  void updatesProfileUsingTheIdFromTheRequestPath() throws Exception {
+  void updatesProfileUsingTheTrustedIdentityHeader() throws Exception {
     Long id = 1L;
     when(service.updateProfile(eq(id), any(UpdateProfileRequest.class)))
         .thenReturn(new UserResponse(id, "user", "13800138000", "new-name", null, null));
 
-    mockMvc.perform(put("/api/v1/users/{id}", id)
+    mockMvc.perform(put("/api/v1/users/me")
+            .header("X-User-Id", id)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"nickname\":\"new-name\",\"phone\":\"13900139000\"}"))
         .andExpect(status().isOk());
@@ -45,7 +46,8 @@ class UserControllerTest {
 
   @Test
   void rejectsNicknameLongerThanFifteenCharacters() throws Exception {
-    mockMvc.perform(put("/api/v1/users/{id}", 1L)
+    mockMvc.perform(put("/api/v1/users/me")
+            .header("X-User-Id", 1L)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"nickname\":\"sixteen-character\",\"phone\":\"13900139000\"}"))
         .andExpect(status().isBadRequest());

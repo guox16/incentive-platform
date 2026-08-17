@@ -16,7 +16,7 @@
 
 完整的命令、接口验证、数据卷管理和故障排查见 [Docker 操作指南](docs/docker-operation-guide.md)。
 
-1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env`，替换所有示例密码，并将 `JWT_SECRET` 设置为至少 32 个字符的随机密钥。
+1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env`，替换所有示例密码，并将 `JWT_SECRET`、`INTERNAL_JWT_SECRET` 设置为两个不同的、至少 32 个字符的随机密钥。
 2. 执行 `docker compose up -d mysql redis rabbitmq nacos` 启动开发依赖。
 3. 按 Docker 操作指南在本机启动用户服务和积分服务；RabbitMQ 管理台为 `http://localhost:15672`，Nacos 为 `http://localhost:8848/nacos`。
 
@@ -34,6 +34,8 @@
 - 登录成功后使用 `Authorization: Bearer <accessToken>` 请求受保护接口；用户自身资源统一使用 `/me` 路径，不从 URL 接收用户 ID。
 - Access Token 过期后前端通过 HttpOnly Cookie 自动轮换 Refresh Token；退出登录会在服务端撤销当前令牌。
 - RBAC 使用 `users`、`roles`、`permissions`、`user_roles`、`role_permissions` 五表；网关按 JWT 权限编码执行授权，不配置角色继承。
+- 用户、积分、激励和奖品服务会再次验证用户 JWT 的签名、有效期、签发方、受众和权限；业务用户 ID 只读取已验证的 `sub`，不信任身份请求头。
+- 激励服务调用内部积分命令时签发独立的一分钟服务 JWT，普通用户 JWT 无法直接执行积分增减。
 - 每个服务只拥有自己的数据库，禁止跨库查询和外键。
 - 所有 HTTP 响应透传或生成 `X-Trace-Id`；错误格式统一为 `code`、`message`、`traceId`、`timestamp`。
 - 业务实现放在各服务内；`common` 仅保留真正跨服务且稳定的技术契约，避免形成共享业务模型。
@@ -41,4 +43,4 @@
 
 ## 下一阶段
 
-加强下游服务身份校验、角色权限管理页面和过期 Refresh Token 清理任务。
+角色权限管理页面、JWT 非对称密钥轮换和过期 Refresh Token 清理任务。

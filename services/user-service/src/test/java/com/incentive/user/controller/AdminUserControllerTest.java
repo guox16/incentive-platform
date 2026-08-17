@@ -2,10 +2,12 @@ package com.incentive.user.controller;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.incentive.user.domain.PermissionCode;
+import com.incentive.user.config.UserSecurityConfiguration;
 import com.incentive.user.domain.UserRole;
 import com.incentive.user.security.AuthorizationSnapshot;
 import com.incentive.user.security.RbacService;
@@ -15,9 +17,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AdminUserController.class)
+@Import(UserSecurityConfiguration.class)
 class AdminUserControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private RbacService rbacService;
@@ -28,6 +33,8 @@ class AdminUserControllerTest {
         UserRole.ADMIN, List.of(PermissionCode.ACTIVITY_MANAGE, PermissionCode.PRIZE_MANAGE)));
 
     mockMvc.perform(put("/api/v1/users/admin/7/role")
+            .with(jwt().jwt(token -> token.subject("1"))
+                .authorities(new SimpleGrantedAuthority("ROLE_MANAGE")))
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"role\":\"ADMIN\"}"))
         .andExpect(status().isOk())

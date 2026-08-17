@@ -57,6 +57,8 @@ services:
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-incentive}
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
+      INTERNAL_JWT_SECRET: "${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET}"
   incentive-service:
     build: { context: ., args: { MODULE: incentive-service } }
     environment:
@@ -69,6 +71,8 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: "${REDIS_PASSWORD:?set REDIS_PASSWORD}"
       POINTS_SERVICE_URL: http://points-service:8082
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
+      INTERNAL_JWT_SECRET: "${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET}"
   award-service:
     build: { context: ., args: { MODULE: award-service } }
     environment:
@@ -77,4 +81,5 @@ services:
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-incentive}
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
 volumes: { mysql-data: {} }

@@ -11,6 +11,7 @@ import com.incentive.user.dto.LoginRequest;
 import com.incentive.user.dto.LoginResponse;
 import com.incentive.user.dto.UserResponse;
 import com.incentive.user.config.RefreshTokenProperties;
+import com.incentive.user.config.UserSecurityConfiguration;
 import com.incentive.user.domain.PermissionCode;
 import com.incentive.user.domain.UserRole;
 import com.incentive.user.security.IssuedSession;
@@ -21,9 +22,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AuthController.class)
+@Import(UserSecurityConfiguration.class)
 class AuthControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private UserAccountService service;

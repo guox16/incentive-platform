@@ -21,3 +21,7 @@ security:
     issuer: "${JWT_ISSUER:https://incentive.local}"
     audience: "${JWT_AUDIENCE:incentive-api}"
     access-token-ttl: "${JWT_ACCESS_TOKEN_TTL:PT15M}"
+  refresh-token:
+    ttl: "${REFRESH_TOKEN_TTL:P30D}"
+    cookie-name: "${REFRESH_TOKEN_COOKIE_NAME:refresh_token}"
+    cookie-secure: "${REFRESH_TOKEN_COOKIE_SECURE:false}"

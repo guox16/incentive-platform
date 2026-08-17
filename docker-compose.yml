@@ -47,6 +47,8 @@ services:
       MYSQL_USER: ${MYSQL_USER:-incentive}
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-P30D}
+      REFRESH_TOKEN_COOKIE_SECURE: "${REFRESH_TOKEN_COOKIE_SECURE:-false}"
   points-service:
     build: { context: ., args: { MODULE: points-service } }
     environment:

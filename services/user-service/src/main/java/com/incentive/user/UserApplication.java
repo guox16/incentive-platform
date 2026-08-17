@@ -2,6 +2,7 @@ package com.incentive.user;
 
 import com.incentive.common.trace.TraceIdFilter;
 import java.time.Clock;
+import java.security.SecureRandom;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -31,5 +32,10 @@ public class UserApplication {
   @Bean
   Clock systemClock() {
     return Clock.systemUTC();
+  }
+
+  @Bean
+  SecureRandom secureRandom() {
+    return new SecureRandom();
   }
 }

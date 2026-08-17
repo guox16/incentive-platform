@@ -111,9 +111,13 @@ async function saveProfile() {
 async function logout() {
   if (loggingOut.value) return;
   loggingOut.value = true;
-  clearAccessToken();
-  loggingOut.value = false;
-  await router.replace('/login');
+  try {
+    await http.post('/auth/logout');
+  } finally {
+    clearAccessToken();
+    loggingOut.value = false;
+    await router.replace('/login');
+  }
 }
 
 onMounted(loadProfile);

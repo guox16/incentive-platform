@@ -40,7 +40,8 @@ public class GatewaySecurityConfiguration {
     return http
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(exchanges -> exchanges
-            .pathMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+            .pathMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login",
+                "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
             .pathMatchers("/actuator/health", "/actuator/info", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
             .pathMatchers("/api/v1/**").authenticated()
             .anyExchange().permitAll())

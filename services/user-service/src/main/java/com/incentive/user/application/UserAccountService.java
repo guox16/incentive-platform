@@ -8,6 +8,8 @@ import com.incentive.user.dto.UpdateProfileRequest;
 import com.incentive.user.dto.UserResponse;
 import com.incentive.user.repository.UserAccountRepository;
 import com.incentive.user.security.JwtTokenService;
+import com.incentive.user.security.RefreshTokenService;
+import com.incentive.user.security.IssuedSession;
 import com.incentive.user.support.UserBusinessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -22,13 +24,15 @@ public class UserAccountService {
   private final UserAccountRepository repository;
   private final PasswordEncoder passwordEncoder;
   private final JwtTokenService jwtTokenService;
+  private final RefreshTokenService refreshTokenService;
 
   /** 创建用户账户应用服务。 */
   public UserAccountService(UserAccountRepository repository, PasswordEncoder passwordEncoder,
-      JwtTokenService jwtTokenService) {
+      JwtTokenService jwtTokenService, RefreshTokenService refreshTokenService) {
     this.repository = repository;
     this.passwordEncoder = passwordEncoder;
     this.jwtTokenService = jwtTokenService;
+    this.refreshTokenService = refreshTokenService;
   }
 
   @Transactional
@@ -53,15 +57,32 @@ public class UserAccountService {
   }
 
   /** 校验用户登录凭证并返回用户资料。 */
-  public LoginResponse login(LoginRequest request) {
+  @Transactional
+  public IssuedSession login(LoginRequest request) {
     String identifier = request.identifier().trim();
     UserAccount account = repository.findByUsernameOrPhone(identifier, identifier)
         .orElseThrow(this::invalidCredentials);
     if (!passwordEncoder.matches(request.password(), account.getPasswordHash())) {
       throw invalidCredentials();
     }
-    var issuedToken = jwtTokenService.issue(account.getId());
-    return new LoginResponse(issuedToken.value(), "Bearer", issuedToken.expiresInSeconds(), toResponse(account));
+    return issueSession(account, refreshTokenService.issue(account.getId()));
+  }
+
+  /** 轮换 Refresh Token 并签发新的短期访问令牌。 */
+  @Transactional(noRollbackFor = UserBusinessException.class)
+  public IssuedSession refresh(String refreshToken) {
+    var rotated = refreshTokenService.rotate(refreshToken);
+    UserAccount account = find(rotated.userId());
+    var accessToken = jwtTokenService.issue(account.getId());
+    return new IssuedSession(
+        new LoginResponse(accessToken.value(), "Bearer", accessToken.expiresInSeconds(), toResponse(account)),
+        rotated.value(), rotated.expiresInSeconds());
+  }
+
+  /** 撤销当前浏览器持有的 Refresh Token；重复调用保持幂等。 */
+  @Transactional
+  public void logout(String refreshToken) {
+    refreshTokenService.revoke(refreshToken);
   }
 
   /** 查询指定用户的资料。 */
@@ -106,5 +127,13 @@ public class UserAccountService {
   /** 将用户账户实体转换为接口响应。 */
   private UserResponse toResponse(UserAccount account) {
     return new UserResponse(account.getId(), account.getUsername(), account.getPhone(), account.getNickname(), account.getCreatedAt(), account.getUpdatedAt());
+  }
+
+  private IssuedSession issueSession(com.incentive.user.domain.UserAccount account,
+      com.incentive.user.security.IssuedRefreshToken refreshToken) {
+    var accessToken = jwtTokenService.issue(account.getId());
+    return new IssuedSession(
+        new LoginResponse(accessToken.value(), "Bearer", accessToken.expiresInSeconds(), toResponse(account)),
+        refreshToken.value(), refreshToken.expiresInSeconds());
   }
 }

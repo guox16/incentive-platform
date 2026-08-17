@@ -15,6 +15,22 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE KEY uk_users_mobile (mobile)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='users';
 
+-- Only a SHA-256 digest is persisted. Raw refresh tokens exist only in HttpOnly cookies.
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id      BIGINT UNSIGNED NOT NULL,
+    token_hash   CHAR(64) NOT NULL,
+    token_family VARCHAR(36) NOT NULL COMMENT 'rotation family used for replay revocation',
+    expires_at   DATETIME(3) NOT NULL,
+    revoked_at   DATETIME(3) NULL,
+    created_at   DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_refresh_tokens_hash (token_hash),
+    KEY idx_refresh_tokens_user (user_id),
+    KEY idx_refresh_tokens_family (token_family),
+    KEY idx_refresh_tokens_expires (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='rotating refresh tokens';
+
 -- V0.1 contains USER and ADMIN; the relation keeps role assignment extensible.
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id BIGINT UNSIGNED NOT NULL,

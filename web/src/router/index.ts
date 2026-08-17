@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { getAccessToken } from '../api/auth';
+import { refreshAccessToken } from '../api/http';
 
 const RouteState = { template: '<span class="route-state" aria-hidden="true"></span>' };
 
@@ -19,9 +20,15 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(to => {
+router.beforeEach(async to => {
   const publicRoutes = new Set(['login', 'register']);
-  if (!publicRoutes.has(String(to.name)) && !getAccessToken()) return { name: 'login' };
+  if (!publicRoutes.has(String(to.name)) && !getAccessToken()) {
+    try {
+      await refreshAccessToken();
+    } catch {
+      return { name: 'login' };
+    }
+  }
   if (publicRoutes.has(String(to.name)) && getAccessToken()) return { name: 'profile' };
   return true;
 });

@@ -1,6 +1,6 @@
 # 用户激励平台
 
-面向面试展示的后端优先微服务项目。当前已完成工程骨架、基础用户账户、JWT/Refresh Token 登录，以及积分余额、加减、流水和幂等能力。
+面向面试展示的后端优先微服务项目。当前已完成工程骨架、基础用户账户、JWT/Refresh Token 登录、五表 RBAC，以及积分余额、加减、流水和幂等能力。
 
 ## 结构
 
@@ -33,6 +33,7 @@
 - 对外 API 固定使用 `/api/v1` 前缀；命令接口必须支持幂等键。
 - 登录成功后使用 `Authorization: Bearer <accessToken>` 请求受保护接口；用户自身资源统一使用 `/me` 路径，不从 URL 接收用户 ID。
 - Access Token 过期后前端通过 HttpOnly Cookie 自动轮换 Refresh Token；退出登录会在服务端撤销当前令牌。
+- RBAC 使用 `users`、`roles`、`permissions`、`user_roles`、`role_permissions` 五表；网关按 JWT 权限编码执行授权，不配置角色继承。
 - 每个服务只拥有自己的数据库，禁止跨库查询和外键。
 - 所有 HTTP 响应透传或生成 `X-Trace-Id`；错误格式统一为 `code`、`message`、`traceId`、`timestamp`。
 - 业务实现放在各服务内；`common` 仅保留真正跨服务且稳定的技术契约，避免形成共享业务模型。
@@ -40,4 +41,4 @@
 
 ## 下一阶段
 
-补齐 `USER`/`ADMIN` 权限控制，再加强服务间身份校验和过期 Refresh Token 清理任务。
+加强下游服务身份校验、角色权限管理页面和过期 Refresh Token 清理任务。

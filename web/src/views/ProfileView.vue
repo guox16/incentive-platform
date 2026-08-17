@@ -2,12 +2,13 @@
 import axios from 'axios';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { clearAccessToken } from '../api/auth';
+import { clearAccessToken, getCurrentRole } from '../api/auth';
 import { http } from '../api/http';
 import type { ApiError, PointBalanceResponse, UserResponse } from '../api/types';
 import AccountHeader from '../components/AccountHeader.vue';
 
 const router = useRouter();
+const canUsePoints = getCurrentRole() !== 'ADMIN';
 const profile = ref<UserResponse | null>(null);
 const pointBalance = ref(0);
 const loading = ref(true);
@@ -40,10 +41,11 @@ async function loadProfile() {
   loading.value = true;
   error.value = '';
   try {
-    const [profileResponse, balanceResponse] = await Promise.all([
-      http.get<UserResponse>('/users/me'),
-      http.get<PointBalanceResponse>('/points/me/balance'),
-    ]);
+    const profileRequest = http.get<UserResponse>('/users/me');
+    const balanceRequest = canUsePoints
+      ? http.get<PointBalanceResponse>('/points/me/balance')
+      : Promise.resolve({ data: { balance: 0 } as PointBalanceResponse });
+    const [profileResponse, balanceResponse] = await Promise.all([profileRequest, balanceRequest]);
     profile.value = profileResponse.data;
     pointBalance.value = balanceResponse.data.balance;
   } catch (requestError) {

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
-import { setAccessToken } from '../api/auth';
+import { defaultRouteForRole, setAuthSession } from '../api/auth';
 import type { ApiError, LoginResponse } from '../api/types';
 
 type AuthMode = 'login' | 'register';
@@ -83,8 +83,8 @@ async function submit() {
 
     const response = await http.post<LoginResponse>('/auth/login', { identifier: form.identifier, password: form.password });
     if (!response.data?.accessToken) throw new Error('登录响应缺少访问令牌');
-    setAccessToken(response.data.accessToken);
-    await router.push('/profile');
+    setAuthSession(response.data);
+    await router.push(defaultRouteForRole(response.data.role));
   } catch (error) {
     submitError.value = getRequestError(error);
   } finally {

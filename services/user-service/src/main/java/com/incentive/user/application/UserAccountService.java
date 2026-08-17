@@ -10,6 +10,7 @@ import com.incentive.user.repository.UserAccountRepository;
 import com.incentive.user.security.JwtTokenService;
 import com.incentive.user.security.RefreshTokenService;
 import com.incentive.user.security.IssuedSession;
+import com.incentive.user.security.RbacService;
 import com.incentive.user.support.UserBusinessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -25,14 +26,17 @@ public class UserAccountService {
   private final PasswordEncoder passwordEncoder;
   private final JwtTokenService jwtTokenService;
   private final RefreshTokenService refreshTokenService;
+  private final RbacService rbacService;
 
   /** 创建用户账户应用服务。 */
   public UserAccountService(UserAccountRepository repository, PasswordEncoder passwordEncoder,
-      JwtTokenService jwtTokenService, RefreshTokenService refreshTokenService) {
+      JwtTokenService jwtTokenService, RefreshTokenService refreshTokenService,
+      RbacService rbacService) {
     this.repository = repository;
     this.passwordEncoder = passwordEncoder;
     this.jwtTokenService = jwtTokenService;
     this.refreshTokenService = refreshTokenService;
+    this.rbacService = rbacService;
   }
 
   @Transactional
@@ -49,7 +53,9 @@ public class UserAccountService {
     // BCrypt 每次产生不同盐值；数据库中永远不保存请求携带的明文密码。
     UserAccount account = new UserAccount(username, phone, passwordEncoder.encode(request.password()), request.nickname().trim());
     try {
-      return toResponse(repository.saveAndFlush(account));
+      UserAccount saved = repository.saveAndFlush(account);
+      rbacService.assignDefaultRole(saved.getId());
+      return toResponse(saved);
     } catch (DataIntegrityViolationException ex) {
       // exists 检查无法消除并发注册竞争，唯一约束才是最终保障。
       throw usernameTaken();
@@ -73,9 +79,11 @@ public class UserAccountService {
   public IssuedSession refresh(String refreshToken) {
     var rotated = refreshTokenService.rotate(refreshToken);
     UserAccount account = find(rotated.userId());
-    var accessToken = jwtTokenService.issue(account.getId());
+    var authorization = rbacService.authorizationFor(account.getId());
+    var accessToken = jwtTokenService.issue(account.getId(), authorization);
     return new IssuedSession(
-        new LoginResponse(accessToken.value(), "Bearer", accessToken.expiresInSeconds(), toResponse(account)),
+        new LoginResponse(accessToken.value(), "Bearer", accessToken.expiresInSeconds(),
+            authorization.role(), authorization.permissions(), toResponse(account)),
         rotated.value(), rotated.expiresInSeconds());
   }
 
@@ -131,9 +139,11 @@ public class UserAccountService {
 
   private IssuedSession issueSession(com.incentive.user.domain.UserAccount account,
       com.incentive.user.security.IssuedRefreshToken refreshToken) {
-    var accessToken = jwtTokenService.issue(account.getId());
+    var authorization = rbacService.authorizationFor(account.getId());
+    var accessToken = jwtTokenService.issue(account.getId(), authorization);
     return new IssuedSession(
-        new LoginResponse(accessToken.value(), "Bearer", accessToken.expiresInSeconds(), toResponse(account)),
+        new LoginResponse(accessToken.value(), "Bearer", accessToken.expiresInSeconds(),
+            authorization.role(), authorization.permissions(), toResponse(account)),
         refreshToken.value(), refreshToken.expiresInSeconds());
   }
 }

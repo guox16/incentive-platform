@@ -23,12 +23,14 @@ class TrustedIdentityFilterTest {
   @Test
   void replacesSpoofedIdentityWithVerifiedJwtSubject() {
     Jwt jwt = new Jwt("token", Instant.now(), Instant.now().plusSeconds(60),
-        Map.of("alg", "HS256"), Map.of("sub", "42", "roles", List.of("USER")));
+        Map.of("alg", "HS256"), Map.of("sub", "42", "roles", List.of("USER"),
+            "permissions", List.of("ACCOUNT_SELF", "POINTS_SELF")));
     var authentication = new JwtAuthenticationToken(jwt);
     var request = MockServerHttpRequest.get("/api/v1/users/me")
         .header(HttpHeaders.AUTHORIZATION, "Bearer token")
         .header(TrustedIdentityFilter.USER_ID_HEADER, "999")
         .header(TrustedIdentityFilter.USER_ROLES_HEADER, "ADMIN")
+        .header(TrustedIdentityFilter.USER_PERMISSIONS_HEADER, "ROLE_MANAGE")
         .build();
     var delegate = MockServerWebExchange.from(request);
     ServerWebExchange exchange = new org.springframework.web.server.ServerWebExchangeDecorator(delegate) {
@@ -50,6 +52,9 @@ class TrustedIdentityFilterTest {
         .getFirst(TrustedIdentityFilter.USER_ID_HEADER)).isEqualTo("42");
     assertThat(forwarded.get().getRequest().getHeaders()
         .getFirst(TrustedIdentityFilter.USER_ROLES_HEADER)).isEqualTo("USER");
+    assertThat(forwarded.get().getRequest().getHeaders()
+        .getFirst(TrustedIdentityFilter.USER_PERMISSIONS_HEADER))
+        .isEqualTo("ACCOUNT_SELF,POINTS_SELF");
   }
 
   @Test

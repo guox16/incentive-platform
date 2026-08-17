@@ -11,7 +11,10 @@ import com.incentive.user.dto.LoginRequest;
 import com.incentive.user.dto.LoginResponse;
 import com.incentive.user.dto.UserResponse;
 import com.incentive.user.config.RefreshTokenProperties;
+import com.incentive.user.domain.PermissionCode;
+import com.incentive.user.domain.UserRole;
 import com.incentive.user.security.IssuedSession;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +48,8 @@ class AuthControllerTest {
   void returnsAccessTokenAfterSuccessfulLogin() throws Exception {
     when(service.login(new LoginRequest("alice", "secret12"))).thenReturn(
         new IssuedSession(
-            new LoginResponse("signed-token", "Bearer", 900,
+            new LoginResponse("signed-token", "Bearer", 900, UserRole.USER,
+                List.of(PermissionCode.ACCOUNT_SELF, PermissionCode.POINTS_SELF),
                 new UserResponse(1L, "alice", "13800138000", "Alice", null, null)),
             "raw-refresh-token", 2592000));
 
@@ -61,13 +65,16 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.accessToken").value("signed-token"))
         .andExpect(jsonPath("$.tokenType").value("Bearer"))
         .andExpect(jsonPath("$.expiresIn").value(900))
+        .andExpect(jsonPath("$.role").value("USER"))
+        .andExpect(jsonPath("$.permissions[0]").value("ACCOUNT_SELF"))
         .andExpect(jsonPath("$.user.id").value(1));
   }
 
   @Test
   void rotatesRefreshTokenFromCookie() throws Exception {
     when(service.refresh("old-refresh")).thenReturn(new IssuedSession(
-        new LoginResponse("new-access", "Bearer", 900,
+        new LoginResponse("new-access", "Bearer", 900, UserRole.USER,
+            List.of(PermissionCode.ACCOUNT_SELF),
             new UserResponse(1L, "alice", "13800138000", "Alice", null, null)),
         "new-refresh", 2592000));
 

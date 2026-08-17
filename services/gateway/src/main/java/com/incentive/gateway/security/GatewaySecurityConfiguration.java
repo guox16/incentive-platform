@@ -16,6 +16,8 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 
 @Configuration
@@ -37,16 +39,30 @@ public class GatewaySecurityConfiguration {
   @Bean
   SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http,
       GatewaySecurityErrorWriter errors) {
+    JwtAuthenticationConverter permissions = new JwtAuthenticationConverter();
+    permissions.setJwtGrantedAuthoritiesConverter(new JwtPermissionConverter());
     return http
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
         .authorizeExchange(exchanges -> exchanges
             .pathMatchers(HttpMethod.POST, "/api/v1/auth/register", "/api/v1/auth/login",
                 "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
             .pathMatchers("/actuator/health", "/actuator/info", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+            .pathMatchers("/api/v1/internal/**").denyAll()
+            .pathMatchers("/api/v1/users/admin/**").hasAuthority("ROLE_MANAGE")
+            .pathMatchers("/api/v1/activities/admin/**").hasAuthority("ACTIVITY_MANAGE")
+            .pathMatchers("/api/v1/awards/prizes/*/inventory-adjustments",
+                "/api/v1/awards/prizes/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
+            .pathMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")
+            .pathMatchers("/api/v1/points/me/**").hasAuthority("POINTS_SELF")
+            .pathMatchers("/api/v1/activities/check-ins/me/**").hasAuthority("CHECK_IN")
+            .pathMatchers("/api/v1/activities/lotteries/**").hasAuthority("LOTTERY_PARTICIPATE")
+            .pathMatchers("/api/v1/activities/redemptions/**").hasAuthority("REDEMPTION_PARTICIPATE")
+            .pathMatchers("/api/v1/users/me").hasAuthority("ACCOUNT_SELF")
             .pathMatchers("/api/v1/**").authenticated()
             .anyExchange().permitAll())
         .oauth2ResourceServer(oauth2 -> oauth2
-            .jwt(jwt -> {})
+            .jwt(jwt -> jwt.jwtAuthenticationConverter(
+                new ReactiveJwtAuthenticationConverterAdapter(permissions)))
             .authenticationEntryPoint((exchange, exception) -> errors.write(
                 exchange, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "请先登录或重新登录")))
         .exceptionHandling(exceptions -> exceptions

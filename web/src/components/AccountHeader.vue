@@ -1,5 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { defaultRouteForRole, getCurrentRole } from '../api/auth';
 defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' | 'admin-activities' | 'admin-prizes' }>();
+const role = getCurrentRole();
+const showUserFeatures = computed(() => role === 'USER' || role === 'SUPER_ADMIN');
+const showAdminFeatures = computed(() => role === 'ADMIN' || role === 'SUPER_ADMIN');
+const home = defaultRouteForRole(role);
 </script>
 
 <template>
@@ -13,26 +19,26 @@ defineProps<{ active: 'profile' | 'points' | 'lottery' | 'redemption' | 'admin-a
       <symbol id="header-calendar" viewBox="0 0 24 24"><path d="M4 6h16v14H4zM8 3v6M16 3v6M4 10h16"/><path d="M8 14h3M13 14h3M8 17h3"/></symbol>
     </svg>
 
-    <RouterLink class="brand" to="/profile" aria-label="偶得账户中心">
+    <RouterLink class="brand" :to="home" aria-label="偶得账户中心">
       <span class="brand-mark">得</span><span>偶得</span>
     </RouterLink>
     <nav aria-label="主导航">
       <RouterLink to="/profile" :class="{ active: active === 'profile' }">
         <svg><use href="#header-user" /></svg><span>用户信息</span>
       </RouterLink>
-      <RouterLink to="/points" :class="{ active: active === 'points' }">
+      <RouterLink v-if="showUserFeatures" to="/points" :class="{ active: active === 'points' }">
         <svg><use href="#header-points" /></svg><span>积分明细</span>
       </RouterLink>
-      <RouterLink to="/lottery" :class="{ active: active === 'lottery' }">
+      <RouterLink v-if="showUserFeatures" to="/lottery" :class="{ active: active === 'lottery' }">
         <svg><use href="#header-gift" /></svg><span>幸运抽奖</span>
       </RouterLink>
-      <RouterLink to="/redemption" :class="{ active: active === 'redemption' }">
+      <RouterLink v-if="showUserFeatures" to="/redemption" :class="{ active: active === 'redemption' }">
         <svg><use href="#header-bag" /></svg><span>兑换商城</span>
       </RouterLink>
-      <RouterLink to="/admin/prizes" :class="{ active: active === 'admin-prizes' }">
+      <RouterLink v-if="showAdminFeatures" to="/admin/prizes" :class="{ active: active === 'admin-prizes' }">
         <svg><use href="#header-admin" /></svg><span>奖品管理</span>
       </RouterLink>
-      <RouterLink to="/admin/activities" :class="{ active: active === 'admin-activities' }">
+      <RouterLink v-if="showAdminFeatures" to="/admin/activities" :class="{ active: active === 'admin-activities' }">
         <svg><use href="#header-calendar" /></svg><span>活动管理</span>
       </RouterLink>
     </nav>

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { clearAccessToken, getAccessToken, setAccessToken } from './auth';
+import { clearAccessToken, getAccessToken, setAuthSession } from './auth';
 import type { InternalAxiosRequestConfig } from 'axios';
 import type { LoginResponse } from './types';
 
@@ -12,7 +12,7 @@ export function refreshAccessToken(): Promise<string> {
   if (!refreshPromise) {
     refreshPromise = refreshHttp.post<LoginResponse>('/auth/refresh')
       .then(response => {
-        setAccessToken(response.data.accessToken);
+        setAuthSession(response.data);
         return response.data.accessToken;
       })
       .finally(() => { refreshPromise = null; });

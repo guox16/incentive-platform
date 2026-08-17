@@ -25,7 +25,7 @@ public class JwtTokenService {
     this.clock = clock;
   }
 
-  public IssuedAccessToken issue(Long userId) {
+  public IssuedAccessToken issue(Long userId, AuthorizationSnapshot authorization) {
     Instant issuedAt = clock.instant();
     Instant expiresAt = issuedAt.plus(properties.accessTokenTtl());
     JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -35,7 +35,9 @@ public class JwtTokenService {
         .issuedAt(issuedAt)
         .expiresAt(expiresAt)
         .id(UUID.randomUUID().toString())
-        .claim("roles", List.of("USER"))
+        .claim("role", authorization.role().name())
+        .claim("roles", List.of(authorization.role().name()))
+        .claim("permissions", authorization.permissions().stream().map(Enum::name).toList())
         .build();
     JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
     String token = encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();

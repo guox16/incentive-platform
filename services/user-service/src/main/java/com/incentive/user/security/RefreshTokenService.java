@@ -70,6 +70,11 @@ public class RefreshTokenService {
         .ifPresent(token -> token.revoke(clock.instant()));
   }
 
+  @Transactional
+  public void revokeAllForUser(Long userId) {
+    repository.revokeActiveByUserId(userId, clock.instant());
+  }
+
   private RefreshToken findForUpdate(String rawToken) {
     if (rawToken == null || rawToken.isBlank()) throw invalidToken("缺少 Refresh Token");
     return repository.findByTokenHashForUpdate(hash(rawToken))

@@ -134,6 +134,27 @@ export type ActivityDetailResponse = ActivitySummaryResponse & {
   items: RedemptionItemResponse[];
 };
 
+export type LoginResponse = {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  role: UserRole;
+  permissions: PermissionCode[];
+  user: UserResponse;
+};
+
+export type UserRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+export type PermissionCode =
+  | 'ACCOUNT_SELF'
+  | 'POINTS_SELF'
+  | 'CHECK_IN'
+  | 'LOTTERY_PARTICIPATE'
+  | 'REDEMPTION_PARTICIPATE'
+  | 'ACTIVITY_MANAGE'
+  | 'PRIZE_MANAGE'
+  | 'INVENTORY_MANAGE'
+  | 'ROLE_MANAGE';
+
 export type AdminActivityResponse = ActivitySummaryResponse & {
   status: ActivityStatus;
   ruleVersion: number;

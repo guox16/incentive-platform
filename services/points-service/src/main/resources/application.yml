@@ -1,6 +1,11 @@
 spring:
   application:
     name: points-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
   cloud:
     nacos:
       discovery:
@@ -20,3 +25,13 @@ management:
     web:
       exposure:
         include: health,info,metrics
+security:
+  jwt:
+    secret: "${JWT_SECRET:development-only-change-this-jwt-secret-now}"
+    issuer: "${JWT_ISSUER:https://incentive.local}"
+    audience: "${JWT_AUDIENCE:incentive-api}"
+  internal-jwt:
+    secret: "${INTERNAL_JWT_SECRET:development-only-change-this-internal-secret}"
+    issuer: "${INTERNAL_JWT_ISSUER:incentive-service}"
+    audience: "${INTERNAL_JWT_AUDIENCE:points-service}"
+    token-ttl: "${INTERNAL_JWT_TTL:PT1M}"

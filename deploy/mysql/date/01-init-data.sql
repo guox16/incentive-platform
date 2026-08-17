@@ -32,6 +32,7 @@ TRUNCATE TABLE points_db.point_accounts;
 
 TRUNCATE TABLE user_db.membership_records;
 TRUNCATE TABLE user_db.user_memberships;
+TRUNCATE TABLE user_db.refresh_tokens;
 TRUNCATE TABLE user_db.user_roles;
 TRUNCATE TABLE user_db.users;
 
@@ -60,8 +61,9 @@ SET @debug_user_id = (
     SELECT id FROM users WHERE username = 'modeladmin' LIMIT 1
 );
 
-INSERT IGNORE INTO user_roles (user_id, role)
-VALUES (@debug_user_id, 'USER');
+INSERT INTO user_roles (user_id, role)
+VALUES (@debug_user_id, 'SUPER_ADMIN')
+ON DUPLICATE KEY UPDATE role = VALUES(role);
 
 INSERT INTO user_memberships (user_id, expires_at)
 VALUES (@debug_user_id, '2035-01-01 00:00:00.000')

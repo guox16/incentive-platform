@@ -3,7 +3,7 @@ import axios from 'axios';
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
-import type { ApiError, UserResponse } from '../api/types';
+import type { ApiError } from '../api/types';
 
 const router = useRouter();
 const showPassword = ref(false);
@@ -48,14 +48,13 @@ async function submit() {
   if (!validate() || loading.value) return;
   loading.value = true;
   try {
-    const response = await http.post<UserResponse>('/auth/register', {
+    await http.post('/auth/register', {
       username: form.username,
       phone: form.phone,
       nickname: form.nickname,
       password: form.password,
     });
-    sessionStorage.setItem('currentUserId', String(response.data.id));
-    await router.push('/profile');
+    await router.push('/login');
   } catch (error) {
     submitError.value = getRequestError(error);
   } finally {

@@ -1,6 +1,11 @@
 spring:
   application:
     name: user-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
   cloud:
     nacos:
       discovery:
@@ -15,3 +20,13 @@ spring:
     open-in-view: false
 server: { port: 8081 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }
+security:
+  jwt:
+    secret: "${JWT_SECRET:development-only-change-this-jwt-secret-now}"
+    issuer: "${JWT_ISSUER:https://incentive.local}"
+    audience: "${JWT_AUDIENCE:incentive-api}"
+    access-token-ttl: "${JWT_ACCESS_TOKEN_TTL:PT15M}"
+  refresh-token:
+    ttl: "${REFRESH_TOKEN_TTL:P30D}"
+    cookie-name: "${REFRESH_TOKEN_COOKIE_NAME:refresh_token}"
+    cookie-secure: "${REFRESH_TOKEN_COOKIE_SECURE:false}"

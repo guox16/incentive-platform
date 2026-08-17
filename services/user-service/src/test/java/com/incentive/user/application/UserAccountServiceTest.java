@@ -4,15 +4,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 import com.incentive.user.domain.UserAccount;
+import com.incentive.user.domain.PermissionCode;
+import com.incentive.user.domain.UserRole;
 import com.incentive.user.dto.LoginRequest;
 import com.incentive.user.dto.RegisterRequest;
 import com.incentive.user.dto.UpdateProfileRequest;
 import com.incentive.user.repository.UserAccountRepository;
+import com.incentive.user.security.IssuedAccessToken;
+import com.incentive.user.security.JwtTokenService;
+import com.incentive.user.security.RefreshTokenService;
+import com.incentive.user.security.IssuedRefreshToken;
+import com.incentive.user.security.RotatedRefreshToken;
+import com.incentive.user.security.AuthorizationSnapshot;
+import com.incentive.user.security.RbacService;
 import com.incentive.user.support.UserBusinessException;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,10 +35,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class UserAccountServiceTest {
   @Mock private UserAccountRepository repository;
+  @Mock private JwtTokenService jwtTokenService;
+  @Mock private RefreshTokenService refreshTokenService;
+  @Mock private RbacService rbacService;
   private UserAccountService service;
+  private final AuthorizationSnapshot authorization = new AuthorizationSnapshot(
+      UserRole.USER, List.of(PermissionCode.ACCOUNT_SELF, PermissionCode.POINTS_SELF));
 
   @BeforeEach
-  void setUp() { service = new UserAccountService(repository, new BCryptPasswordEncoder()); }
+  void setUp() {
+    service = new UserAccountService(
+        repository, new BCryptPasswordEncoder(), jwtTokenService, refreshTokenService, rbacService);
+  }
 
   @Test
   void registersAccountWithHashedPassword() {
@@ -46,6 +65,7 @@ class UserAccountServiceTest {
     assertThat(response.username()).isEqualTo("alice");
     assertThat(response.nickname()).isEqualTo("Alice");
     assertThat(response.phone()).isEqualTo("13800138000");
+    verify(rbacService).assignDefaultRole(1L);
   }
 
   @Test
@@ -61,8 +81,17 @@ class UserAccountServiceTest {
   void returnsProfileForCorrectPassword() {
     UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
     when(repository.findByUsernameOrPhone("alice", "alice")).thenReturn(Optional.of(account));
+    when(rbacService.authorizationFor(1L)).thenReturn(authorization);
+    when(jwtTokenService.issue(1L, authorization)).thenReturn(new IssuedAccessToken("signed-token", 900));
+    when(refreshTokenService.issue(1L)).thenReturn(new IssuedRefreshToken("refresh-token", 2592000));
 
-    assertThat(service.login(new LoginRequest("alice", "secret12")).username()).isEqualTo("alice");
+    var session = service.login(new LoginRequest("alice", "secret12"));
+    var response = session.response();
+    assertThat(response.user().username()).isEqualTo("alice");
+    assertThat(response.accessToken()).isEqualTo("signed-token");
+    assertThat(response.expiresIn()).isEqualTo(900);
+    assertThat(response.role()).isEqualTo(UserRole.USER);
+    assertThat(session.refreshToken()).isEqualTo("refresh-token");
   }
 
   @Test
@@ -101,8 +130,27 @@ class UserAccountServiceTest {
   void logsInWithPhoneNumber() {
     UserAccount account = account("alice", new BCryptPasswordEncoder().encode("secret12"));
     when(repository.findByUsernameOrPhone("13800138000", "13800138000")).thenReturn(Optional.of(account));
+    when(rbacService.authorizationFor(1L)).thenReturn(authorization);
+    when(jwtTokenService.issue(1L, authorization)).thenReturn(new IssuedAccessToken("signed-token", 900));
+    when(refreshTokenService.issue(1L)).thenReturn(new IssuedRefreshToken("refresh-token", 2592000));
 
-    assertThat(service.login(new LoginRequest("13800138000", "secret12")).username()).isEqualTo("alice");
+    assertThat(service.login(new LoginRequest("13800138000", "secret12"))
+        .response().user().username()).isEqualTo("alice");
+  }
+
+  @Test
+  void rotatesRefreshTokenAndIssuesNewAccessToken() {
+    UserAccount account = account("alice", "hash");
+    when(refreshTokenService.rotate("old-refresh"))
+        .thenReturn(new RotatedRefreshToken(1L, "new-refresh", 2592000));
+    when(repository.findById(1L)).thenReturn(Optional.of(account));
+    when(rbacService.authorizationFor(1L)).thenReturn(authorization);
+    when(jwtTokenService.issue(1L, authorization)).thenReturn(new IssuedAccessToken("new-access", 900));
+
+    var session = service.refresh("old-refresh");
+
+    assertThat(session.response().accessToken()).isEqualTo("new-access");
+    assertThat(session.refreshToken()).isEqualTo("new-refresh");
   }
 
   @Test

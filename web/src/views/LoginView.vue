@@ -3,7 +3,8 @@ import axios from 'axios';
 import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
-import type { ApiError, UserResponse } from '../api/types';
+import { defaultRouteForRole, setAuthSession } from '../api/auth';
+import type { ApiError, LoginResponse } from '../api/types';
 
 type AuthMode = 'login' | 'register';
 
@@ -80,11 +81,10 @@ async function submit() {
       return;
     }
 
-    const response = await http.post<UserResponse>('/auth/login', { identifier: form.identifier, password: form.password });
-    const user = response.data;
-    if (!user?.id) throw new Error('登录响应缺少用户标识');
-    sessionStorage.setItem('currentUserId', String(user.id));
-    await router.push('/profile');
+    const response = await http.post<LoginResponse>('/auth/login', { identifier: form.identifier, password: form.password });
+    if (!response.data?.accessToken) throw new Error('登录响应缺少访问令牌');
+    setAuthSession(response.data);
+    await router.push(defaultRouteForRole(response.data.role));
   } catch (error) {
     submitError.value = getRequestError(error);
   } finally {

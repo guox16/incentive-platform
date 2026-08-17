@@ -1,6 +1,7 @@
 package com.incentive.activity.infrastructure;
 
 import com.incentive.activity.support.IncentiveBusinessException;
+import com.incentive.activity.security.InternalJwtTokenService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -11,14 +12,18 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class PointsClient {
   private final RestClient restClient;
+  private final InternalJwtTokenService tokenService;
 
-  public PointsClient(RestClient.Builder builder, @Value("${clients.points.base-url}") String baseUrl) {
+  public PointsClient(RestClient.Builder builder, @Value("${clients.points.base-url}") String baseUrl,
+      InternalJwtTokenService tokenService) {
     this.restClient = builder.baseUrl(baseUrl).build();
+    this.tokenService = tokenService;
   }
 
   public PointCreditResult credit(Long businessId, Long userId, long amount) {
     PointCreditResponse response = restClient.post()
         .uri("/api/v1/internal/points/credit")
+        .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
         .body(new PointCreditRequest(businessId, userId, amount, "CHECK_IN", "每日签到奖励"))
         .retrieve()
         .body(PointCreditResponse.class);
@@ -30,6 +35,7 @@ public class PointsClient {
     try {
       PointDebitResponse response = restClient.post()
           .uri("/api/v1/internal/points/debit")
+          .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
           .body(new PointDebitRequest(businessId, userId, amount, source, remark))
           .retrieve()
           .body(PointDebitResponse.class);

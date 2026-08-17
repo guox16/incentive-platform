@@ -2,11 +2,13 @@
 import axios from 'axios';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { clearAccessToken, getCurrentRole } from '../api/auth';
 import { http } from '../api/http';
 import type { ApiError, PointBalanceResponse, UserResponse } from '../api/types';
 import AccountHeader from '../components/AccountHeader.vue';
 
 const router = useRouter();
+const canUsePoints = getCurrentRole() !== 'ADMIN';
 const profile = ref<UserResponse | null>(null);
 const pointBalance = ref(0);
 const loading = ref(true);
@@ -39,15 +41,11 @@ async function loadProfile() {
   loading.value = true;
   error.value = '';
   try {
-    const userId = sessionStorage.getItem('currentUserId');
-    if (!userId) {
-      await router.replace('/login');
-      return;
-    }
-    const [profileResponse, balanceResponse] = await Promise.all([
-      http.get<UserResponse>(`/users/${userId}`),
-      http.get<PointBalanceResponse>(`/points/users/${userId}/balance`),
-    ]);
+    const profileRequest = http.get<UserResponse>('/users/me');
+    const balanceRequest = canUsePoints
+      ? http.get<PointBalanceResponse>('/points/me/balance')
+      : Promise.resolve({ data: { balance: 0 } as PointBalanceResponse });
+    const [profileResponse, balanceResponse] = await Promise.all([profileRequest, balanceRequest]);
     profile.value = profileResponse.data;
     pointBalance.value = balanceResponse.data.balance;
   } catch (requestError) {
@@ -87,13 +85,8 @@ function cancelEditing() {
 }
 
 async function saveProfile() {
-  const userId = sessionStorage.getItem('currentUserId');
   const nextNickname = draft.value.nickname.trim();
   const nextPhone = draft.value.phone.trim();
-  if (!userId) {
-    await router.replace('/login');
-    return;
-  }
   if (!nextNickname || nextNickname.length > 15) {
     formError.value = '昵称需填写，且不能超过 15 个字。';
     return;
@@ -106,7 +99,7 @@ async function saveProfile() {
   saving.value = true;
   formError.value = '';
   try {
-    const response = await http.put<UserResponse>(`/users/${userId}`, { nickname: nextNickname, phone: nextPhone });
+    const response = await http.put<UserResponse>('/users/me', { nickname: nextNickname, phone: nextPhone });
     profile.value = response.data;
     editing.value = false;
     showSaveFeedback();
@@ -120,9 +113,13 @@ async function saveProfile() {
 async function logout() {
   if (loggingOut.value) return;
   loggingOut.value = true;
-  sessionStorage.removeItem('currentUserId');
-  loggingOut.value = false;
-  await router.replace('/login');
+  try {
+    await http.post('/auth/logout');
+  } finally {
+    clearAccessToken();
+    loggingOut.value = false;
+    await router.replace('/login');
+  }
 }
 
 onMounted(loadProfile);

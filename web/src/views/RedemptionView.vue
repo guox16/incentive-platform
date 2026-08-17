@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { http } from '../api/http';
 import type {
   ActivityDetailResponse,
@@ -13,7 +12,6 @@ import type {
 } from '../api/types';
 import AccountHeader from '../components/AccountHeader.vue';
 
-const router = useRouter();
 const activities = ref<ActivityDetailResponse[]>([]);
 const activeCode = ref('');
 const balance = ref(0);
@@ -49,14 +47,9 @@ async function loadActivities() {
   loading.value = true;
   loadError.value = '';
   try {
-    const userId = sessionStorage.getItem('currentUserId');
-    if (!userId) {
-      await router.replace('/login');
-      return;
-    }
     const [activityResponse, balanceResponse] = await Promise.all([
       http.get<ActivitySummaryResponse[]>('/activities/active'),
-      http.get<PointBalanceResponse>(`/points/users/${userId}/balance`),
+      http.get<PointBalanceResponse>('/points/me/balance'),
     ]);
     const redemptionActivities = activityResponse.data.filter(item => item.type === 'REDEMPTION');
     activities.value = await Promise.all(redemptionActivities.map(async item =>
@@ -81,16 +74,11 @@ function start(item: RedemptionItemResponse) {
 
 async function confirm() {
   if (!current.value || !activity.value || submitting.value) return;
-  const userId = sessionStorage.getItem('currentUserId');
-  if (!userId) {
-    await router.replace('/login');
-    return;
-  }
   submitting.value = true;
   submitError.value = '';
   try {
     const response = await http.post<RedemptionResponse>(
-      `/activities/redemptions/${activity.value.code}/items/${current.value.id}/users/${userId}`,
+      `/activities/redemptions/${activity.value.code}/items/${current.value.id}`,
     );
     result.value = response.data;
     balance.value = response.data.balanceAfter;

@@ -1,0 +1,13 @@
+package com.incentive.user.domain;
+
+public enum PermissionCode {
+  ACCOUNT_SELF,
+  POINTS_SELF,
+  CHECK_IN,
+  LOTTERY_PARTICIPATE,
+  REDEMPTION_PARTICIPATE,
+  ACTIVITY_MANAGE,
+  PRIZE_MANAGE,
+  INVENTORY_MANAGE,
+  ROLE_MANAGE
+}

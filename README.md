@@ -35,6 +35,7 @@
 - Access Token 过期后前端通过 HttpOnly Cookie 自动轮换 Refresh Token；退出登录会在服务端撤销当前令牌。
 - RBAC 使用 `users`、`roles`、`permissions`、`user_roles`、`role_permissions` 五表；网关按 JWT 权限编码执行授权，不配置角色继承。
 - 用户、积分、激励和奖品服务会再次验证用户 JWT 的签名、有效期、签发方、受众和权限；业务用户 ID 只读取已验证的 `sub`，不信任身份请求头。
+- Access Token 使用 Redis 黑名单即时撤销：退出登录按 `jti` 撤销当前令牌，角色变更按用户签发截止点撤销全部旧令牌；网关和所有下游服务均会校验，记录随 Token 最长有效期自动过期。
 - 激励服务调用内部积分命令时签发独立的一分钟服务 JWT，普通用户 JWT 无法直接执行积分增减。
 - 每个服务只拥有自己的数据库，禁止跨库查询和外键。
 - 所有 HTTP 响应透传或生成 `X-Trace-Id`；错误格式统一为 `code`、`message`、`traceId`、`timestamp`。

@@ -1,12 +1,17 @@
 package com.incentive.common.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Arrays;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 class JwtSecurityComponentsTest {
   @Test
@@ -31,6 +36,47 @@ class JwtSecurityComponentsTest {
 
     assertThat(new JwtAudienceValidator("incentive-api").validate(jwt).hasErrors()).isFalse();
     assertThat(new JwtAudienceValidator("another-api").validate(jwt).hasErrors()).isTrue();
+  }
+
+  @Test
+  void rejectsJtiStoredInRedisBlacklist() {
+    StringRedisTemplate redis = mock(StringRedisTemplate.class);
+    @SuppressWarnings("unchecked")
+    ValueOperations<String, String> values = mock(ValueOperations.class);
+    when(redis.opsForValue()).thenReturn(values);
+    when(values.multiGet(List.of(AccessTokenBlacklistKeys.jti("revoked-jti"),
+        AccessTokenBlacklistKeys.userCutoff("42"))))
+        .thenReturn(Arrays.asList("1", null));
+    Jwt jwt = Jwt.withTokenValue("token")
+        .header("alg", "HS256")
+        .subject("42")
+        .claim("jti", "revoked-jti")
+        .issuedAt(Instant.now())
+        .expiresAt(Instant.now().plusSeconds(60))
+        .build();
+
+    assertThat(new RedisAccessTokenBlacklistValidator(redis).validate(jwt).hasErrors()).isTrue();
+  }
+
+  @Test
+  void rejectsTokenIssuedBeforeUserCutoff() {
+    StringRedisTemplate redis = mock(StringRedisTemplate.class);
+    @SuppressWarnings("unchecked")
+    ValueOperations<String, String> values = mock(ValueOperations.class);
+    when(redis.opsForValue()).thenReturn(values);
+    when(values.multiGet(List.of(AccessTokenBlacklistKeys.jti("old-jti"),
+        AccessTokenBlacklistKeys.userCutoff("42"))))
+        .thenReturn(Arrays.asList(null, "2000"));
+    Jwt jwt = Jwt.withTokenValue("token")
+        .header("alg", "HS256")
+        .subject("42")
+        .claim("jti", "old-jti")
+        .issuedAt(Instant.ofEpochMilli(1000))
+        .expiresAt(Instant.now().plusSeconds(60))
+        .claim("issued_at_ms", 1000L)
+        .build();
+
+    assertThat(new RedisAccessTokenBlacklistValidator(redis).validate(jwt).hasErrors()).isTrue();
   }
 
   private Jwt jwt(String subject, Map<String, Object> claims) {

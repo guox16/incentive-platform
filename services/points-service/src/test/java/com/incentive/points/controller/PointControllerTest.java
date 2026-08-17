@@ -15,12 +15,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @WebMvcTest(InternalPointCommandController.class)
 @Import(PointsSecurityConfiguration.class)
 class PointControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private PointAccountService service;
+  @MockBean private StringRedisTemplate redis;
 
   @Test
   void rejectsInvalidCreditCommandWithUnifiedError() throws Exception {

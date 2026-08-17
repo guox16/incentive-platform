@@ -27,11 +27,12 @@ class RbacServiceTest {
   @Mock private UserRoleAssignmentRepository assignments;
   @Mock private RolePermissionRepository grants;
   @Mock private RefreshTokenService refreshTokens;
+  @Mock private AccessTokenBlacklistService accessTokens;
   private RbacService service;
 
   @BeforeEach
   void setUp() {
-    service = new RbacService(users, assignments, grants, refreshTokens);
+    service = new RbacService(users, assignments, grants, refreshTokens, accessTokens);
   }
 
   @Test
@@ -61,6 +62,7 @@ class RbacServiceTest {
     assertThat(assignment.getRole()).isEqualTo(UserRole.ADMIN);
     assertThat(result.permissions()).containsExactly(PermissionCode.ACTIVITY_MANAGE);
     verify(refreshTokens).revokeAllForUser(7L);
+    verify(accessTokens).revokeAllForUser(7L);
   }
 
   @Test
@@ -75,5 +77,6 @@ class RbacServiceTest {
         .isInstanceOf(UserBusinessException.class)
         .extracting("code").isEqualTo("LAST_SUPER_ADMIN");
     verifyNoInteractions(refreshTokens);
+    verifyNoInteractions(accessTokens);
   }
 }

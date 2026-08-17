@@ -18,12 +18,14 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @WebMvcTest(PointQueryController.class)
 @Import(PointsSecurityConfiguration.class)
 class PointQueryControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private PointAccountService service;
+  @MockBean private StringRedisTemplate redis;
 
   @Test
   void bindsPaginationParametersByTheirHttpNames() throws Exception {

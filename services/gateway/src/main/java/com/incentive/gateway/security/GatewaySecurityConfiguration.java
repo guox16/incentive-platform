@@ -24,7 +24,8 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 @EnableConfigurationProperties(GatewayJwtProperties.class)
 public class GatewaySecurityConfiguration {
   @Bean
-  ReactiveJwtDecoder jwtDecoder(GatewayJwtProperties properties) {
+  ReactiveJwtDecoder jwtDecoder(GatewayJwtProperties properties,
+      ReactiveAccessTokenBlacklist blacklist) {
     SecretKey key = new SecretKeySpec(
         properties.secret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
     NimbusReactiveJwtDecoder decoder = NimbusReactiveJwtDecoder.withSecretKey(key)
@@ -33,7 +34,7 @@ public class GatewaySecurityConfiguration {
     OAuth2TokenValidator<Jwt> issuer = JwtValidators.createDefaultWithIssuer(properties.issuer());
     decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
         issuer, new JwtAudienceValidator(properties.audience())));
-    return decoder;
+    return token -> decoder.decode(token).flatMap(blacklist::validate);
   }
 
   @Bean

@@ -19,6 +19,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AdminUserController.class)
@@ -26,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class AdminUserControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private RbacService rbacService;
+  @MockBean private StringRedisTemplate redis;
 
   @Test
   void changesUserRoleAndReturnsEffectivePermissions() throws Exception {

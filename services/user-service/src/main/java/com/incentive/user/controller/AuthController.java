@@ -7,6 +7,7 @@ import com.incentive.user.dto.RegisterRequest;
 import com.incentive.user.dto.UserResponse;
 import com.incentive.user.config.RefreshTokenProperties;
 import com.incentive.user.security.IssuedSession;
+import com.incentive.user.security.AccessTokenBlacklistService;
 import com.incentive.user.support.UserBusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +17,8 @@ import java.time.Duration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,10 +32,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
   private final UserAccountService service;
   private final RefreshTokenProperties refreshTokenProperties;
+  private final AccessTokenBlacklistService accessTokenBlacklist;
   /** 创建认证控制器。 */
-  public AuthController(UserAccountService service, RefreshTokenProperties refreshTokenProperties) {
+  public AuthController(UserAccountService service, RefreshTokenProperties refreshTokenProperties,
+      AccessTokenBlacklistService accessTokenBlacklist) {
     this.service = service;
     this.refreshTokenProperties = refreshTokenProperties;
+    this.accessTokenBlacklist = accessTokenBlacklist;
   }
 
   /** 接收用户注册请求。 */
@@ -66,8 +72,10 @@ public class AuthController {
   @Operation(summary = "退出登录并撤销 Refresh Token")
   public void logout(
       @CookieValue(name = "${security.refresh-token.cookie-name}", required = false) String refreshToken,
+      @AuthenticationPrincipal Jwt jwt,
       HttpServletResponse response) {
     service.logout(refreshToken);
+    accessTokenBlacklist.revoke(jwt);
     response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie("", Duration.ZERO).toString());
   }
 

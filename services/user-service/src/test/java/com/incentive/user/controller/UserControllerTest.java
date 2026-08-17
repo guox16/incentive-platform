@@ -19,6 +19,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(UserController.class)
@@ -26,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class UserControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private UserAccountService service;
+  @MockBean private StringRedisTemplate redis;
 
   @Test
   void getsProfileUsingVerifiedJwtSubjectAndIgnoresSpoofedHeader() throws Exception {

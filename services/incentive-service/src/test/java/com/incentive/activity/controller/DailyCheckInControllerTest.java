@@ -19,12 +19,14 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @WebMvcTest(DailyCheckInController.class)
 @Import(IncentiveSecurityConfiguration.class)
 class DailyCheckInControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private DailyCheckInService service;
+  @MockBean private StringRedisTemplate redis;
 
   @Test
   void bindsAuthenticatedUserIdFromVerifiedJwt() throws Exception {

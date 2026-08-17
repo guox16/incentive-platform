@@ -1,5 +1,10 @@
 spring:
   application: { name: award-service }
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
   cloud:
     nacos:
       discovery:

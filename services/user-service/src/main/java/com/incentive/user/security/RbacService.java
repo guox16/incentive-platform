@@ -17,13 +17,16 @@ public class RbacService {
   private final UserRoleAssignmentRepository assignments;
   private final RolePermissionRepository grants;
   private final RefreshTokenService refreshTokens;
+  private final AccessTokenBlacklistService accessTokens;
 
   public RbacService(UserAccountRepository users, UserRoleAssignmentRepository assignments,
-      RolePermissionRepository grants, RefreshTokenService refreshTokens) {
+      RolePermissionRepository grants, RefreshTokenService refreshTokens,
+      AccessTokenBlacklistService accessTokens) {
     this.users = users;
     this.assignments = assignments;
     this.grants = grants;
     this.refreshTokens = refreshTokens;
+    this.accessTokens = accessTokens;
   }
 
   @Transactional
@@ -53,6 +56,7 @@ public class RbacService {
     }
     assignment.changeRole(newRole);
     refreshTokens.revokeAllForUser(userId);
+    accessTokens.revokeAllForUser(userId);
     return snapshot(newRole);
   }
 

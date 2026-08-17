@@ -1,6 +1,7 @@
 package com.incentive.user.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,7 @@ import com.incentive.user.config.UserSecurityConfiguration;
 import com.incentive.user.domain.PermissionCode;
 import com.incentive.user.domain.UserRole;
 import com.incentive.user.security.IssuedSession;
+import com.incentive.user.security.AccessTokenBlacklistService;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @WebMvcTest(AuthController.class)
 @Import(UserSecurityConfiguration.class)
@@ -31,6 +35,8 @@ class AuthControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private UserAccountService service;
   @MockBean private RefreshTokenProperties refreshTokenProperties;
+  @MockBean private AccessTokenBlacklistService accessTokenBlacklist;
+  @MockBean private StringRedisTemplate redis;
 
   @BeforeEach
   void setUp() {
@@ -92,6 +98,7 @@ class AuthControllerTest {
   @Test
   void revokesRefreshTokenAndExpiresCookieOnLogout() throws Exception {
     mockMvc.perform(post("/api/v1/auth/logout")
+            .with(jwt().jwt(token -> token.subject("1").claim("jti", "access-jti")))
             .cookie(new jakarta.servlet.http.Cookie("refresh_token", "current-refresh")))
         .andExpect(status().isNoContent())
         .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
@@ -100,5 +107,6 @@ class AuthControllerTest {
                 org.hamcrest.Matchers.containsString("Max-Age=0"))));
 
     verify(service).logout("current-refresh");
+    verify(accessTokenBlacklist).revoke(org.mockito.ArgumentMatchers.any(Jwt.class));
   }
 }

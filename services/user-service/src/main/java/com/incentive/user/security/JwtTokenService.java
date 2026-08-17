@@ -33,6 +33,7 @@ public class JwtTokenService {
         .audience(List.of(properties.audience()))
         .subject(userId.toString())
         .issuedAt(issuedAt)
+        .claim("issued_at_ms", issuedAt.toEpochMilli())
         .expiresAt(expiresAt)
         .id(UUID.randomUUID().toString())
         .claim("role", authorization.role().name())

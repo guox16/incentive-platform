@@ -16,9 +16,17 @@
 
 完整的命令、接口验证、数据卷管理和故障排查见 [Docker 操作指南](docs/docker-operation-guide.md)。
 
-1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env`，替换所有示例密码，并将 `JWT_SECRET`、`INTERNAL_JWT_SECRET` 设置为两个不同的、至少 32 个字符的随机密钥。
-2. 执行 `docker compose up -d mysql redis rabbitmq nacos` 启动开发依赖。
-3. 按 Docker 操作指南在本机启动用户服务和积分服务；RabbitMQ 管理台为 `http://localhost:15672`，Nacos 为 `http://localhost:8848/nacos`。
+1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env`，替换所有示例密码，并将 `JWT_SECRET`、`INTERNAL_JWT_SECRET` 设置为两个不同的、至少 32 个字符的随机密钥，同时设置随机的 `XXL_JOB_ACCESS_TOKEN`。
+2. 执行 `docker compose up -d mysql redis rabbitmq nacos xxl-job-admin` 启动开发依赖。
+3. 按 Docker 操作指南在本机启动用户服务和积分服务；RabbitMQ 管理台为 `http://localhost:15672`，Nacos 为 `http://localhost:8848/nacos`，XXL-JOB 管理台为 `http://localhost:8088/xxl-job-admin`。
+
+XXL-JOB 初始化账号为 `admin / 123456`，仅用于本地开发，首次登录后应立即修改。过期积分预占补偿任务已初始化为停止状态，积分服务执行器注册成功后在管理台启用该任务。
+
+如果本机已经存在 `mysql-data` 数据卷，MySQL 不会再次自动执行新增初始化脚本。可执行以下命令补建 XXL-JOB 数据库和表，无需删除现有数据卷：
+
+```bash
+docker compose exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < /docker-entrypoint-initdb.d/01-databases.sql && mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < /docker-entrypoint-initdb.d/06-xxl-job-schema.sql'
+```
 
 后端使用 Java 21、Spring Boot 3.2.4、Spring Cloud 2023.0.1 与 Spring Cloud Alibaba 2023.0.1.0（Nacos）；该组合按 Alibaba 的官方兼容表锁定。 本地 Maven 构建命令为 `mvn verify`。前端在 `web` 目录中执行 `npm install`、`npm run dev`。
 

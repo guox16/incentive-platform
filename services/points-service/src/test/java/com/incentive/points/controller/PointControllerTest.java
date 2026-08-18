@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.incentive.points.application.PointAccountService;
+import com.incentive.points.application.PointReservationService;
 import com.incentive.points.config.PointsSecurityConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +23,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 class PointControllerTest {
   @Autowired private MockMvc mockMvc;
   @MockBean private PointAccountService service;
+  @MockBean private PointReservationService reservationService;
   @MockBean private StringRedisTemplate redis;
 
   @Test
@@ -42,5 +44,15 @@ class PointControllerTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"businessId\":1,\"userId\":1,\"amount\":10,\"source\":\"TEST\"}"))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void rejectsInvalidReservationCommand() throws Exception {
+    mockMvc.perform(post("/api/v1/internal/points/reservations")
+            .with(jwt().authorities(new SimpleGrantedAuthority("POINTS_COMMAND")))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"businessId\":1,\"userId\":1,\"amount\":10,\"source\":\"TEST\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
   }
 }

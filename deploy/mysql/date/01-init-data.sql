@@ -27,7 +27,8 @@ TRUNCATE TABLE award_db.awards;
 TRUNCATE TABLE award_db.prize_inventory_ledgers;
 TRUNCATE TABLE award_db.prizes;
 
-TRUNCATE TABLE points_db.point_ledger;
+TRUNCATE TABLE points_db.point_reservations;
+TRUNCATE TABLE points_db.point_transactions;
 TRUNCATE TABLE points_db.point_accounts;
 
 TRUNCATE TABLE user_db.membership_records;
@@ -80,15 +81,18 @@ ON DUPLICATE KEY UPDATE
     balance = VALUES(balance),
     version = VALUES(version);
 
-INSERT INTO point_ledger
-    (user_id, business_no, operation_type, change_amount, balance_after, remark)
+INSERT INTO point_transactions
+    (business_id, user_id, type, amount, balance_before, balance_after, source, remark)
 VALUES
-    (@debug_user_id, 'DEBUG-POINTS-INIT-001', 'ADJUST', 1000, 1000, '本地调试账户初始化积分')
+    (900000000000000001, @debug_user_id, 'CREDIT', 1000, 0, 1000,
+     'DEBUG_INIT', '本地调试账户初始化积分')
 ON DUPLICATE KEY UPDATE
     user_id = VALUES(user_id),
-    operation_type = VALUES(operation_type),
-    change_amount = VALUES(change_amount),
+    type = VALUES(type),
+    amount = VALUES(amount),
+    balance_before = VALUES(balance_before),
     balance_after = VALUES(balance_after),
+    source = VALUES(source),
     remark = VALUES(remark);
 
 -- ---------------------------------------------------------------------------

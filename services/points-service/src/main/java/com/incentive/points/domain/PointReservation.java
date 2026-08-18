@@ -17,8 +17,8 @@ import java.util.Objects;
 /**
  * 跨服务积分消费的预占记录。
  *
- * <p>业务号是 reserve、confirm 和 cancel 重试时共享的幂等键；本实体暂不修改账户余额，
- * 余额冻结与释放将在积分预占应用服务中接入。</p>
+ * <p>业务号是 reserve、confirm 和 cancel 重试时共享的幂等键。预占成功时可用余额已经扣减，
+ * 确认只生成正式扣减流水，取消则把积分退回账户。</p>
  */
 @Entity
 @Table(name = "point_reservations",
@@ -41,6 +41,12 @@ public class PointReservation {
 
   @Column(nullable = false, updatable = false)
   private long amount;
+
+  @Column(name = "balance_before", nullable = false, updatable = false)
+  private long balanceBefore;
+
+  @Column(name = "balance_after", nullable = false, updatable = false)
+  private long balanceAfter;
 
   @Column(nullable = false, length = 32, updatable = false)
   private String source;
@@ -79,14 +85,19 @@ public class PointReservation {
 
   protected PointReservation() {}
 
-  /** 创建一条尚未影响账户余额的积分预占记录。 */
+  /** 创建一条已经原子扣减账户可用余额的积分预占记录。 */
   public PointReservation(Long businessId, Long userId, long amount, String source,
-      String remark, Instant expiresAt, Instant now) {
+      String remark, long balanceBefore, long balanceAfter, Instant expiresAt, Instant now) {
     if (amount <= 0) throw new IllegalArgumentException("预占积分必须大于0");
     this.businessId = Objects.requireNonNull(businessId, "业务号不能为空");
     this.userId = Objects.requireNonNull(userId, "用户ID不能为空");
     this.source = requireText(source, "业务来源不能为空");
     this.amount = amount;
+    if (balanceBefore < amount || balanceAfter < 0 || balanceBefore - amount != balanceAfter) {
+      throw new IllegalArgumentException("预占余额快照不合法");
+    }
+    this.balanceBefore = balanceBefore;
+    this.balanceAfter = balanceAfter;
     this.remark = remark;
     this.expiresAt = Objects.requireNonNull(expiresAt, "过期时间不能为空");
     this.createdAt = Objects.requireNonNull(now, "创建时间不能为空");
@@ -141,6 +152,8 @@ public class PointReservation {
   public Long getBusinessId() { return businessId; }
   public Long getUserId() { return userId; }
   public long getAmount() { return amount; }
+  public long getBalanceBefore() { return balanceBefore; }
+  public long getBalanceAfter() { return balanceAfter; }
   public String getSource() { return source; }
   public String getRemark() { return remark; }
   public PointReservationStatus getStatus() { return status; }

@@ -45,6 +45,6 @@ class PointReservationTest {
 
   private PointReservation reservation() {
     return new PointReservation(1001L, 1L, 10, "LOTTERY", "抽奖积分预占",
-        NOW.plusSeconds(60), NOW);
+        100, 90, NOW.plusSeconds(60), NOW);
   }
 }

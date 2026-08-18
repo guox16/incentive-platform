@@ -40,11 +40,28 @@ class PointReservationRepositoryTest {
         .containsExactly(1002L, 1001L);
   }
 
+  @Test
+  void changesStateOnlyOnceWithConditionalUpdates() {
+    repository.saveAndFlush(reservation(1001L, 1L));
+
+    assertThat(repository.confirmAtomically(1001L, NOW.plusSeconds(10))).isEqualTo(1);
+    assertThat(repository.confirmAtomically(1001L, NOW.plusSeconds(20))).isZero();
+    assertThat(repository.cancelAtomically(1001L, NOW.plusSeconds(20))).isZero();
+  }
+
+  @Test
+  void refusesToConfirmExpiredReservation() {
+    repository.saveAndFlush(reservation(1001L, 1L));
+
+    assertThat(repository.confirmAtomically(1001L, NOW.plusSeconds(60))).isZero();
+  }
+
   private PointReservation reservation(Long businessId, Long userId) {
     return reservation(businessId, userId, NOW.plusSeconds(60));
   }
 
   private PointReservation reservation(Long businessId, Long userId, Instant expiresAt) {
-    return new PointReservation(businessId, userId, 10, "LOTTERY", null, expiresAt, NOW);
+    return new PointReservation(
+        businessId, userId, 10, "LOTTERY", null, 100, 90, expiresAt, NOW);
   }
 }

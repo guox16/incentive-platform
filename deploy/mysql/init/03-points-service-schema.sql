@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS point_reservations (
     business_id              BIGINT UNSIGNED NOT NULL COMMENT 'stable idempotency key',
     user_id                  BIGINT UNSIGNED NOT NULL,
     amount                   BIGINT UNSIGNED NOT NULL COMMENT 'reserved points',
+    balance_before           BIGINT UNSIGNED NOT NULL COMMENT 'available balance before reservation',
+    balance_after            BIGINT UNSIGNED NOT NULL COMMENT 'available balance after reservation',
     source                   VARCHAR(32) NOT NULL COMMENT 'business source, e.g. LOTTERY or REDEMPTION',
     remark                   VARCHAR(200) NULL,
     status                   VARCHAR(16) NOT NULL DEFAULT 'RESERVED'
@@ -35,6 +37,8 @@ CREATE TABLE IF NOT EXISTS point_reservations (
     KEY idx_point_reservation_user_created (user_id, created_at),
     KEY idx_point_reservation_status_expires (status, expires_at),
     CONSTRAINT chk_point_reservation_amount CHECK (amount > 0),
+    CONSTRAINT chk_point_reservation_balance
+        CHECK (balance_before >= amount AND balance_after = balance_before - amount),
     CONSTRAINT chk_point_reservation_status
         CHECK (status IN ('RESERVED', 'CONFIRMED', 'CANCELLED', 'EXPIRED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='point reservations';

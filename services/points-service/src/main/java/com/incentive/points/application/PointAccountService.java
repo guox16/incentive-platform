@@ -7,6 +7,7 @@ import com.incentive.points.dto.PointCommandRequest;
 import com.incentive.points.dto.PointTransactionPageResponse;
 import com.incentive.points.dto.PointTransactionResponse;
 import com.incentive.points.repository.PointAccountRepository;
+import com.incentive.points.repository.PointReservationRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import com.incentive.points.support.PointBusinessException;
 import java.util.Locale;
@@ -20,14 +21,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PointAccountService {
   private final PointAccountRepository accountRepository;
+  private final PointReservationRepository reservationRepository;
   private final PointTransactionRepository transactionRepository;
   private final PointAccountCommandExecutor commandExecutor;
 
   /** 创建积分账户应用服务。 */
   public PointAccountService(PointAccountRepository accountRepository,
+      PointReservationRepository reservationRepository,
       PointTransactionRepository transactionRepository,
       PointAccountCommandExecutor commandExecutor) {
     this.accountRepository = accountRepository;
+    this.reservationRepository = reservationRepository;
     this.transactionRepository = transactionRepository;
     this.commandExecutor = commandExecutor;
   }
@@ -54,6 +58,7 @@ public class PointAccountService {
   /** 为用户增加积分，并保证业务号幂等。 */
   public PointTransactionResponse credit(PointCommandRequest request) {
     NormalizedPointCommand command = normalize(request, PointTransactionType.CREDIT);
+    ensureBusinessIdNotReserved(command.businessId());
     PointTransaction existing = findExisting(command);
     if (existing != null) return toResponse(existing, true);
 
@@ -67,6 +72,7 @@ public class PointAccountService {
   /** 扣减用户积分，并保证业务号幂等和余额充足。 */
   public PointTransactionResponse debit(PointCommandRequest request) {
     NormalizedPointCommand command = normalize(request, PointTransactionType.DEBIT);
+    ensureBusinessIdNotReserved(command.businessId());
     PointTransaction existing = findExisting(command);
     if (existing != null) return toResponse(existing, true);
 
@@ -94,10 +100,18 @@ public class PointAccountService {
 
   /** 并发失败事务回滚后，读取胜出请求已经提交的流水。 */
   private PointTransactionResponse replayAfterRace(NormalizedPointCommand command) {
+    ensureBusinessIdNotReserved(command.businessId());
     PointTransaction existing = findExisting(command);
     if (existing != null) return toResponse(existing, true);
     throw new PointBusinessException(
         "POINTS_COMMAND_CONFLICT", "积分命令正在处理或已完成，请安全重试", HttpStatus.CONFLICT);
+  }
+
+  private void ensureBusinessIdNotReserved(Long businessId) {
+    if (reservationRepository.findByBusinessId(businessId).isPresent()) {
+      throw new PointBusinessException(
+          "IDEMPOTENCY_KEY_REUSED", "业务号已被积分预占命令使用", HttpStatus.CONFLICT);
+    }
   }
 
   /** 标准化积分命令中的字符串字段。 */

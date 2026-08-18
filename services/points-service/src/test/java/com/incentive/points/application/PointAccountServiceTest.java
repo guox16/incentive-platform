@@ -6,12 +6,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
 
 import com.incentive.points.domain.InsufficientPointsException;
+import com.incentive.points.domain.PointReservation;
 import com.incentive.points.domain.PointTransaction;
 import com.incentive.points.domain.PointTransactionType;
 import com.incentive.points.dto.PointCommandRequest;
 import com.incentive.points.repository.PointAccountRepository;
+import com.incentive.points.repository.PointReservationRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import com.incentive.points.support.PointBusinessException;
 import java.util.List;
@@ -30,13 +33,15 @@ import org.springframework.data.domain.Pageable;
 class PointAccountServiceTest {
   private static final AtomicLong BUSINESS_IDS = new AtomicLong();
   @Mock private PointAccountRepository accountRepository;
+  @Mock private PointReservationRepository reservationRepository;
   @Mock private PointTransactionRepository transactionRepository;
   @Mock private PointAccountCommandExecutor commandExecutor;
   private PointAccountService service;
 
   @BeforeEach
   void setUp() {
-    service = new PointAccountService(accountRepository, transactionRepository, commandExecutor);
+    service = new PointAccountService(
+        accountRepository, reservationRepository, transactionRepository, commandExecutor);
   }
 
   @Test
@@ -128,6 +133,17 @@ class PointAccountServiceTest {
     assertThat(response.balanceBefore()).isEqualTo(100);
     assertThat(response.balanceAfter()).isEqualTo(60);
     assertThat(response.type()).isEqualTo(PointTransactionType.DEBIT);
+  }
+
+  @Test
+  void rejectsBusinessIdAlreadyUsedByReservation() {
+    PointCommandRequest request = request(100, "award", null);
+    when(reservationRepository.findByBusinessId(request.businessId()))
+        .thenReturn(Optional.of(mock(PointReservation.class)));
+
+    assertThatThrownBy(() -> service.credit(request))
+        .isInstanceOf(PointBusinessException.class)
+        .extracting("code").isEqualTo("IDEMPOTENCY_KEY_REUSED");
   }
 
   @Test

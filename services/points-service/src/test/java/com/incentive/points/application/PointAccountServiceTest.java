@@ -5,18 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.incentive.points.domain.InsufficientPointsException;
-import com.incentive.points.domain.PointAccount;
 import com.incentive.points.domain.PointTransaction;
 import com.incentive.points.domain.PointTransactionType;
 import com.incentive.points.dto.PointCommandRequest;
 import com.incentive.points.repository.PointAccountRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import com.incentive.points.support.PointBusinessException;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
@@ -25,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
@@ -33,10 +31,13 @@ class PointAccountServiceTest {
   private static final AtomicLong BUSINESS_IDS = new AtomicLong();
   @Mock private PointAccountRepository accountRepository;
   @Mock private PointTransactionRepository transactionRepository;
+  @Mock private PointAccountCommandExecutor commandExecutor;
   private PointAccountService service;
 
   @BeforeEach
-  void setUp() { service = new PointAccountService(accountRepository, transactionRepository); }
+  void setUp() {
+    service = new PointAccountService(accountRepository, transactionRepository, commandExecutor);
+  }
 
   @Test
   void returnsVirtualZeroBalanceWithoutCreatingAccount() {
@@ -53,34 +54,32 @@ class PointAccountServiceTest {
   @Test
   void firstCreditCreatesAccountAndLedger() {
     PointCommandRequest request = request(100, "award", "welcome");
-    PointAccount account = new PointAccount(request.userId());
+    PointTransaction created = transaction(
+        request, PointTransactionType.CREDIT, "AWARD", "welcome", 0, 100);
     when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
-    when(accountRepository.existsById(request.userId())).thenReturn(false);
-    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
-    when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(commandExecutor.credit(any(NormalizedPointCommand.class))).thenReturn(created);
 
     var response = service.credit(request);
 
     assertThat(response.balanceBefore()).isZero();
     assertThat(response.balanceAfter()).isEqualTo(100);
     assertThat(response.source()).isEqualTo("AWARD");
-    verify(accountRepository).createIfAbsent(eq(request.userId()), any(Instant.class));
+    verify(commandExecutor).credit(any(NormalizedPointCommand.class));
   }
 
   @Test
-  void creditToExistingAccountSkipsIdempotentInsert() {
+  void normalizesCreditSourceBeforeAtomicExecution() {
     PointCommandRequest request = request(10, "task", null);
-    PointAccount account = new PointAccount(request.userId());
+    PointTransaction created = transaction(
+        request, PointTransactionType.CREDIT, "TASK", null, 0, 10);
     when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
-    when(accountRepository.existsById(request.userId())).thenReturn(true);
-    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
-    when(transactionRepository.saveAndFlush(any(PointTransaction.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(commandExecutor.credit(any(NormalizedPointCommand.class))).thenReturn(created);
 
     service.credit(request);
 
-    verify(accountRepository, never()).createIfAbsent(eq(request.userId()), any(Instant.class));
-    verify(accountRepository).findByUserIdForUpdate(request.userId());
+    verify(commandExecutor).credit(eq(new NormalizedPointCommand(
+        request.businessId(), request.userId(), PointTransactionType.CREDIT,
+        request.amount(), "TASK", null)));
   }
 
   @Test
@@ -110,7 +109,8 @@ class PointAccountServiceTest {
   void debitWithoutAccountIsInsufficient() {
     PointCommandRequest request = request(1, "exchange", null);
     when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
-    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.empty());
+    when(commandExecutor.debit(any(NormalizedPointCommand.class)))
+        .thenThrow(new InsufficientPointsException());
 
     assertThatThrownBy(() -> service.debit(request)).isInstanceOf(InsufficientPointsException.class);
   }
@@ -118,17 +118,32 @@ class PointAccountServiceTest {
   @Test
   void debitsExistingAccountAndRecordsBalanceChange() {
     PointCommandRequest request = request(40, "exchange", "order");
-    PointAccount account = new PointAccount(request.userId());
-    account.credit(100);
+    PointTransaction created = transaction(
+        request, PointTransactionType.DEBIT, "EXCHANGE", "order", 100, 60);
     when(transactionRepository.findByBusinessId(request.businessId())).thenReturn(Optional.empty());
-    when(accountRepository.findByUserIdForUpdate(request.userId())).thenReturn(Optional.of(account));
-    when(transactionRepository.saveAndFlush(any(PointTransaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    when(commandExecutor.debit(any(NormalizedPointCommand.class))).thenReturn(created);
 
     var response = service.debit(request);
 
     assertThat(response.balanceBefore()).isEqualTo(100);
     assertThat(response.balanceAfter()).isEqualTo(60);
     assertThat(response.type()).isEqualTo(PointTransactionType.DEBIT);
+  }
+
+  @Test
+  void returnsCommittedTransactionAfterConcurrentIdempotencyRace() {
+    PointCommandRequest request = request(100, "award", "welcome");
+    PointTransaction existing = transaction(
+        request, PointTransactionType.CREDIT, "AWARD", "welcome", 0, 100);
+    when(transactionRepository.findByBusinessId(request.businessId()))
+        .thenReturn(Optional.empty(), Optional.of(existing));
+    when(commandExecutor.credit(any(NormalizedPointCommand.class)))
+        .thenThrow(new PointCommandRaceException(new DataIntegrityViolationException("duplicate")));
+
+    var response = service.credit(request);
+
+    assertThat(response.replayed()).isTrue();
+    assertThat(response.balanceAfter()).isEqualTo(100);
   }
 
   @Test
@@ -150,8 +165,13 @@ class PointAccountServiceTest {
   }
 
   private PointTransaction transaction(PointCommandRequest request, PointTransactionType type, String source, String remark) {
+    return transaction(request, type, source, remark, 0, request.amount());
+  }
+
+  private PointTransaction transaction(PointCommandRequest request, PointTransactionType type,
+      String source, String remark, long before, long after) {
     return new PointTransaction(request.businessId(), request.userId(), type,
-        request.amount(), 0, request.amount(), source, remark);
+        request.amount(), before, after, source, remark);
   }
 
   private long nextBusinessId() { return BUSINESS_IDS.incrementAndGet(); }

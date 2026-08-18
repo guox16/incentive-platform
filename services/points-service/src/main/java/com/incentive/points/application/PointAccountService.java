@@ -1,6 +1,5 @@
 package com.incentive.points.application;
 
-import com.incentive.points.domain.PointAccount;
 import com.incentive.points.domain.PointTransaction;
 import com.incentive.points.domain.PointTransactionType;
 import com.incentive.points.dto.PointBalanceResponse;
@@ -10,30 +9,31 @@ import com.incentive.points.dto.PointTransactionResponse;
 import com.incentive.points.repository.PointAccountRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import com.incentive.points.support.PointBusinessException;
-import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 积分账户的命令和查询入口，统一维护事务、行锁与幂等语义。 */
+/** 积分账户的命令和查询入口，统一维护业务号幂等与响应语义。 */
 @Service
-@Transactional(readOnly = true)
 public class PointAccountService {
   private final PointAccountRepository accountRepository;
   private final PointTransactionRepository transactionRepository;
+  private final PointAccountCommandExecutor commandExecutor;
 
   /** 创建积分账户应用服务。 */
-  public PointAccountService(PointAccountRepository accountRepository, PointTransactionRepository transactionRepository) {
+  public PointAccountService(PointAccountRepository accountRepository,
+      PointTransactionRepository transactionRepository,
+      PointAccountCommandExecutor commandExecutor) {
     this.accountRepository = accountRepository;
     this.transactionRepository = transactionRepository;
+    this.commandExecutor = commandExecutor;
   }
 
   /** 查询用户当前积分余额；未开户时返回零余额。 */
+  @Transactional(readOnly = true)
   public PointBalanceResponse getBalance(Long userId) {
     return accountRepository.findById(userId)
         .map(account -> new PointBalanceResponse(userId, account.getBalance(), true, account.getUpdatedAt()))
@@ -42,6 +42,7 @@ public class PointAccountService {
   }
 
   /** 分页查询用户的积分流水。 */
+  @Transactional(readOnly = true)
   public PointTransactionPageResponse getTransactions(Long userId, int page, int size) {
     var result = transactionRepository.findByUserIdOrderByCreatedAtDesc(
         userId, PageRequest.of(page, size));
@@ -50,62 +51,34 @@ public class PointAccountService {
         result.getTotalElements(), result.getTotalPages());
   }
 
-  @Transactional(isolation = Isolation.READ_COMMITTED)
   /** 为用户增加积分，并保证业务号幂等。 */
   public PointTransactionResponse credit(PointCommandRequest request) {
-    NormalizedCommand command = normalize(request, PointTransactionType.CREDIT);
+    NormalizedPointCommand command = normalize(request, PointTransactionType.CREDIT);
     PointTransaction existing = findExisting(command);
     if (existing != null) return toResponse(existing, true);
 
-    // 只在未建账时执行幂等插入。已存在账户直接获取行锁，避免
-    // INSERT IGNORE 的重复键锁与后续 FOR UPDATE 发生锁升级竞争。
-    if (!accountRepository.existsById(command.userId())) {
-      accountRepository.createIfAbsent(command.userId(), Instant.now());
-    }
-    PointAccount account = accountRepository.findByUserIdForUpdate(command.userId())
-        .orElseThrow(() -> new IllegalStateException("积分账户创建后未找到"));
-    existing = findExisting(command);
-    if (existing != null) return toResponse(existing, true);
-
-    long before;
     try {
-      before = account.credit(command.amount());
-    } catch (ArithmeticException ex) {
-      throw new PointBusinessException("POINTS_BALANCE_OVERFLOW", "积分余额超过允许范围", HttpStatus.CONFLICT);
+      return toResponse(commandExecutor.credit(command), false);
+    } catch (PointCommandRaceException ex) {
+      return replayAfterRace(command);
     }
-    return saveTransaction(command, before, account.getBalance());
   }
 
-  @Transactional(isolation = Isolation.READ_COMMITTED)
   /** 扣减用户积分，并保证业务号幂等和余额充足。 */
   public PointTransactionResponse debit(PointCommandRequest request) {
-    NormalizedCommand command = normalize(request, PointTransactionType.DEBIT);
+    NormalizedPointCommand command = normalize(request, PointTransactionType.DEBIT);
     PointTransaction existing = findExisting(command);
     if (existing != null) return toResponse(existing, true);
 
-    PointAccount account = accountRepository.findByUserIdForUpdate(command.userId())
-        .orElseThrow(() -> new com.incentive.points.domain.InsufficientPointsException());
-    existing = findExisting(command);
-    if (existing != null) return toResponse(existing, true);
-
-    long before = account.debit(command.amount());
-    return saveTransaction(command, before, account.getBalance());
-  }
-
-  /** 保存积分流水并返回响应结果。 */
-  private PointTransactionResponse saveTransaction(NormalizedCommand command, long before, long after) {
-    PointTransaction transaction = new PointTransaction(command.businessId(), command.userId(), command.type(),
-        command.amount(), before, after, command.source(), command.remark());
     try {
-      // 强制 flush，让全局唯一业务号冲突在当前命令内暴露；事务会同时回滚余额变更。
-      return toResponse(transactionRepository.saveAndFlush(transaction), false);
-    } catch (DataIntegrityViolationException ex) {
-      throw new PointBusinessException("POINTS_COMMAND_CONFLICT", "积分命令正在处理或已完成，请安全重试", HttpStatus.CONFLICT);
+      return toResponse(commandExecutor.debit(command), false);
+    } catch (PointCommandRaceException ex) {
+      return replayAfterRace(command);
     }
   }
 
   /** 查找已处理的同业务号命令，并校验命令内容一致。 */
-  private PointTransaction findExisting(NormalizedCommand command) {
+  private PointTransaction findExisting(NormalizedPointCommand command) {
     return transactionRepository.findByBusinessId(command.businessId()).map(existing -> {
       boolean same = existing.getUserId().equals(command.userId())
           && existing.getType() == command.type()
@@ -119,11 +92,19 @@ public class PointAccountService {
     }).orElse(null);
   }
 
+  /** 并发失败事务回滚后，读取胜出请求已经提交的流水。 */
+  private PointTransactionResponse replayAfterRace(NormalizedPointCommand command) {
+    PointTransaction existing = findExisting(command);
+    if (existing != null) return toResponse(existing, true);
+    throw new PointBusinessException(
+        "POINTS_COMMAND_CONFLICT", "积分命令正在处理或已完成，请安全重试", HttpStatus.CONFLICT);
+  }
+
   /** 标准化积分命令中的字符串字段。 */
-  private NormalizedCommand normalize(PointCommandRequest request, PointTransactionType type) {
+  private NormalizedPointCommand normalize(PointCommandRequest request, PointTransactionType type) {
     String source = request.source().trim().toUpperCase(Locale.ROOT);
     String remark = request.remark() == null || request.remark().isBlank() ? null : request.remark().trim();
-    return new NormalizedCommand(request.businessId(), request.userId(),
+    return new NormalizedPointCommand(request.businessId(), request.userId(),
         type, request.amount(), source, remark);
   }
 
@@ -135,7 +116,4 @@ public class PointAccountService {
         transaction.getBalanceAfter(), transaction.getSource(), transaction.getRemark(),
         transaction.getCreatedAt(), replayed);
   }
-
-  private record NormalizedCommand(Long businessId, Long userId, PointTransactionType type,
-                                   long amount, String source, String remark) {}
 }

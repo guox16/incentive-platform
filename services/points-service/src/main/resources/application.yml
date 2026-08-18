@@ -25,6 +25,25 @@ management:
     web:
       exposure:
         include: health,info,metrics
+xxl:
+  job:
+    admin:
+      addresses: "${XXL_JOB_ADMIN_ADDRESSES:http://xxl-job-admin:8080}"
+      timeout: ${XXL_JOB_ADMIN_TIMEOUT:3}
+    executor:
+      enabled: ${XXL_JOB_ENABLED:false}
+      appname: "${XXL_JOB_EXECUTOR_APP_NAME:incentive-points-service}"
+      access-token: "${XXL_JOB_ACCESS_TOKEN:}"
+      ip: "${XXL_JOB_EXECUTOR_IP:}"
+      address: "${XXL_JOB_EXECUTOR_ADDRESS:}"
+      port: ${XXL_JOB_EXECUTOR_PORT:9999}
+      log-path: "${XXL_JOB_LOG_PATH:./logs/xxl-job}"
+      log-retention-days: ${XXL_JOB_LOG_RETENTION_DAYS:30}
+points:
+  reservation:
+    compensation:
+      batch-size: ${POINT_RESERVATION_COMPENSATION_BATCH_SIZE:100}
+      max-per-run: ${POINT_RESERVATION_COMPENSATION_MAX_PER_RUN:1000}
 security:
   jwt:
     secret: "${JWT_SECRET:development-only-change-this-jwt-secret-now}"

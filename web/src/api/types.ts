@@ -180,6 +180,10 @@ export type UpdateActivityRequest = Omit<CreateActivityRequest, 'code' | 'type'>
   status: ActivityStatus;
 };
 
+export type LotteryDrawRequest = {
+  requestId: string;
+};
+
 export type LotteryDrawResponse = {
   participationId: number;
   activityCode: string;

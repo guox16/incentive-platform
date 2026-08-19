@@ -6,6 +6,7 @@ import type {
   ActivityDetailResponse,
   ActivitySummaryResponse,
   ApiError,
+  LotteryDrawRequest,
   LotteryDrawResponse,
   LotteryPrizeResponse,
   PointBalanceResponse,
@@ -25,6 +26,21 @@ const activePrize = ref(0);
 const drawResult = ref<LotteryDrawResponse | null>(null);
 const activity = computed(() => activities.value.find(item => item.code === activeCode.value) ?? null);
 const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(balance.value));
+const pendingRequestKey = (activityCode: string) => `lottery:pending-request:${activityCode}`;
+
+function getOrCreateRequestId(activityCode: string) {
+  const storageKey = pendingRequestKey(activityCode);
+  const pendingRequestId = sessionStorage.getItem(storageKey);
+  if (pendingRequestId) return pendingRequestId;
+
+  const requestId = crypto.randomUUID();
+  sessionStorage.setItem(storageKey, requestId);
+  return requestId;
+}
+
+function clearRequestId(activityCode: string) {
+  sessionStorage.removeItem(pendingRequestKey(activityCode));
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
@@ -80,17 +96,25 @@ async function draw() {
   if (drawing.value || !activity.value) return;
   drawing.value = true;
   drawError.value = '';
+  const selectedActivity = activity.value;
+  const requestId = getOrCreateRequestId(selectedActivity.code);
   try {
     const response = await http.post<LotteryDrawResponse>(
-      `/activities/lotteries/${activity.value.code}/draw`,
+      `/activities/lotteries/${selectedActivity.code}/draw`,
+      { requestId } satisfies LotteryDrawRequest,
     );
+    clearRequestId(selectedActivity.code);
     drawResult.value = response.data;
     balance.value = response.data.balanceAfter;
-    const prizeIndex = activity.value.prizes.findIndex(prize => prize.prizeId === response.data.prizeId);
+    const prizeIndex = selectedActivity.prizes.findIndex(prize => prize.prizeId === response.data.prizeId);
     activePrize.value = prizeIndex < 0 ? 0 : prizeIndex;
     resultOpen.value = true;
   } catch (error) {
-    drawError.value = getErrorMessage(error, '本次抽奖未完成，请稍后重试');
+    const outcomeUnknown = axios.isAxiosError(error) && !error.response;
+    if (!outcomeUnknown) clearRequestId(selectedActivity.code);
+    drawError.value = outcomeUnknown
+      ? '网络开了个小差，请再试一次。'
+      : getErrorMessage(error, '本次抽奖未完成，请稍后重试');
   } finally {
     drawing.value = false;
   }

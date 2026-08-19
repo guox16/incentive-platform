@@ -55,7 +55,7 @@ class LotteryServiceTest {
   }
 
   @Test
-  void winningPrizeDebitsPointsAndCreatesPendingAward() {
+  void winningPrizeReservesAndConfirmsPointsBeforeCreatingPendingAward() {
     IncentiveActivity activity = activity();
     ParticipationRule rule = rule();
     LotteryPrize prize = prize(31L, PrizeType.VIRTUAL);
@@ -66,7 +66,8 @@ class LotteryServiceTest {
     assertThat(response.won()).isTrue();
     assertThat(response.pendingAwardCreated()).isTrue();
     assertThat(response.balanceAfter()).isEqualTo(90);
-    verify(pointsClient).debit(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY");
+    verify(pointsClient).reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY");
+    verify(pointsClient).confirmReservation(9001L);
     verify(pendingAwardRepository).save(any(PendingAward.class));
   }
 
@@ -94,8 +95,12 @@ class LotteryServiceTest {
         .thenReturn(List.of(prize));
     when(prizePicker.pick(1L, 1, List.of(prize))).thenReturn(prize.getId());
     when(businessNumberGenerator.next()).thenReturn(9001L);
-    when(pointsClient.debit(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY"))
-        .thenReturn(new PointsClient.PointDebitResult(44L, 90L));
+    when(pointsClient.reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY"))
+        .thenReturn(new PointsClient.PointReservationResult(
+            9001L, 90L, "RESERVED", null, NOW.plusSeconds(300), false));
+    when(pointsClient.confirmReservation(9001L))
+        .thenReturn(new PointsClient.PointReservationResult(
+            9001L, 90L, "CONFIRMED", 44L, NOW.plusSeconds(300), false));
     when(participationRepository.saveAndFlush(any(LotteryParticipation.class)))
         .thenAnswer(invocation -> {
           LotteryParticipation participation = invocation.getArgument(0);

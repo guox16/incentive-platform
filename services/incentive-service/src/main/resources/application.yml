@@ -16,6 +16,7 @@ spring:
 clients:
   points:
     base-url: ${POINTS_SERVICE_URL:http://localhost:8082}
+    reservation-ttl: ${POINTS_RESERVATION_TTL:PT5M}
 server: { port: 8085 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }
 security:

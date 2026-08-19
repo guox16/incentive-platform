@@ -80,12 +80,16 @@ public class LotteryService {
         .findFirst().orElseThrow(() -> new IncentiveBusinessException(
             "LOTTERY_POOL_STALE", "抽奖奖池与当前规则不一致", HttpStatus.CONFLICT));
 
-    PointsClient.PointDebitResult debit = pointsClient.debit(businessNumberGenerator.next(), userId,
-        rule.getPointsCost(), "LOTTERY", "参与抽奖：" + activity.getCode());
+    Long pointsBusinessId = businessNumberGenerator.next();
+    PointsClient.PointReservationResult reservation = pointsClient.reserve(
+        pointsBusinessId, userId, rule.getPointsCost(),
+        "LOTTERY", "参与抽奖：" + activity.getCode());
+    PointsClient.PointReservationResult confirmation =
+        pointsClient.confirmReservation(pointsBusinessId);
     String eligibilityResult = "{\"passed\":true,\"usedTodayBefore\":" + usedToday + "}";
     LotteryParticipation participation = participationRepository.saveAndFlush(
         new LotteryParticipation(activity, rule, userId, selected, eligibilityResult,
-            debit.transactionId(), now));
+            confirmation.confirmedTransactionId(), now));
     boolean createsPendingAward = selected.getPrizeType() != PrizeType.NONE;
     if (createsPendingAward) {
       pendingAwardRepository.save(PendingAward.forLottery(participation, now));
@@ -94,7 +98,7 @@ public class LotteryService {
     return new LotteryDrawResponse(participation.getId(), activity.getCode(), userId,
         selected.getPrizeId(), selected.getPrizeName(), selected.getPrizeType(),
         selected.getCoverUrl(), selected.getPrizeType() != PrizeType.NONE, createsPendingAward,
-        rule.getPointsCost(), debit.transactionId(), debit.balanceAfter(), now);
+        rule.getPointsCost(), confirmation.confirmedTransactionId(), reservation.balanceAfter(), now);
   }
 
   private void validateRule(ParticipationRule rule) {

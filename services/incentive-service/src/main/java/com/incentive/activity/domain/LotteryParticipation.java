@@ -67,6 +67,23 @@ public class LotteryParticipation {
     this.createdAt = now;
   }
 
+  public LotteryParticipation(LotteryOrder order, Long pointTransactionId, Instant now) {
+    this.activityId = order.getActivityId();
+    this.ruleId = order.getRuleId();
+    this.ruleVersion = order.getRuleVersion();
+    this.userId = order.getUserId();
+    this.lotteryPrizeId = order.getLotteryPrizeId();
+    this.prizeId = order.getPrizeId();
+    this.prizeName = order.getPrizeName();
+    this.prizeType = order.getPrizeType();
+    this.coverUrl = order.getCoverUrl();
+    this.awardPayload = order.getAwardPayload();
+    this.pointsCost = order.getPointsCost();
+    this.eligibilityResult = order.getEligibilityResult();
+    this.pointTransactionId = pointTransactionId;
+    this.createdAt = now;
+  }
+
   public Long getId() { return id; }
   public Long getUserId() { return userId; }
   public Long getPrizeId() { return prizeId; }

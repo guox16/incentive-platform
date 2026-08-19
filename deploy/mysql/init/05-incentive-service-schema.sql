@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
     points_cost            BIGINT UNSIGNED NOT NULL COMMENT '本次抽奖积分成本',
     points_business_id     BIGINT UNSIGNED NOT NULL COMMENT 'Snowflake积分业务号',
+    points_reservation_expires_at DATETIME(3) NULL COMMENT '积分预占过期时间',
     eligibility_result     JSON NULL COMMENT '资格校验结果快照',
     status                 VARCHAR(24) NOT NULL DEFAULT 'INIT' COMMENT 'INIT、POINTS_RESERVED、RESULT_SAVED、SUCCESS、FAILED',
     failure_code           VARCHAR(64) NULL COMMENT '最近一次失败的稳定错误码；创建时为空',

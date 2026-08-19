@@ -7,10 +7,12 @@ import com.incentive.points.dto.PointReservationResponse;
 import com.incentive.points.repository.PointReservationRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import com.incentive.points.support.PointBusinessException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +23,19 @@ public class PointReservationService {
   private final PointReservationRepository reservationRepository;
   private final PointTransactionRepository transactionRepository;
   private final PointReservationCommandExecutor commandExecutor;
+  private final Duration reservationTtl;
 
   public PointReservationService(PointReservationRepository reservationRepository,
       PointTransactionRepository transactionRepository,
-      PointReservationCommandExecutor commandExecutor) {
+      PointReservationCommandExecutor commandExecutor,
+      @Value("${points.reservation.ttl:PT5M}") Duration reservationTtl) {
     this.reservationRepository = reservationRepository;
     this.transactionRepository = transactionRepository;
     this.commandExecutor = commandExecutor;
+    if (reservationTtl.isNegative() || reservationTtl.isZero()) {
+      throw new IllegalArgumentException("积分预占有效期必须大于0");
+    }
+    this.reservationTtl = reservationTtl;
   }
 
   /** 创建预占；相同业务号和相同请求参数重复调用时返回原结果。 */
@@ -97,8 +105,7 @@ public class PointReservationService {
     boolean same = existing.getUserId().equals(command.userId())
         && existing.getAmount() == command.amount()
         && existing.getSource().equals(command.source())
-        && Objects.equals(existing.getRemark(), command.remark())
-        && existing.getExpiresAt().equals(command.expiresAt());
+        && Objects.equals(existing.getRemark(), command.remark());
     if (!same) throw idempotencyKeyReused();
     return existing;
   }
@@ -131,7 +138,7 @@ public class PointReservationService {
         ? null : request.remark().trim();
     return new NormalizedPointReservationCommand(
         request.businessId(), request.userId(), request.amount(), source, remark,
-        request.expiresAt().truncatedTo(ChronoUnit.MILLIS));
+        now().plus(reservationTtl).truncatedTo(ChronoUnit.MILLIS));
   }
 
   private PointReservationResponse toResponse(PointReservation reservation, boolean replayed) {

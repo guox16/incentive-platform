@@ -16,7 +16,6 @@ spring:
 clients:
   points:
     base-url: ${POINTS_SERVICE_URL:http://localhost:8082}
-    reservation-ttl: ${POINTS_RESERVATION_TTL:PT5M}
 id-generator:
   worker-id: ${SNOWFLAKE_WORKER_ID:1}
 server: { port: 8085 }

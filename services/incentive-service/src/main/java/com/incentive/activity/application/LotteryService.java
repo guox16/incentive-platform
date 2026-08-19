@@ -17,15 +17,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class LotteryService {
   private final LotteryOrderCreationService orderCreationService;
+  private final LotteryOrderStateService orderStateService;
   private final LotteryParticipationRepository participationRepository;
   private final PendingAwardRepository pendingAwardRepository;
   private final PointsClient pointsClient;
   private final Clock clock;
 
   public LotteryService(LotteryOrderCreationService orderCreationService,
+      LotteryOrderStateService orderStateService,
       LotteryParticipationRepository participationRepository,
       PendingAwardRepository pendingAwardRepository, PointsClient pointsClient, Clock clock) {
     this.orderCreationService = orderCreationService;
+    this.orderStateService = orderStateService;
     this.participationRepository = participationRepository;
     this.pendingAwardRepository = pendingAwardRepository;
     this.pointsClient = pointsClient;
@@ -39,6 +42,7 @@ public class LotteryService {
     PointsClient.PointReservationResult reservation = pointsClient.reserve(
         order.getPointsBusinessId(), userId, order.getPointsCost(),
         "LOTTERY", "参与抽奖：" + order.getActivityCode());
+    orderStateService.markPointsReserved(order.getId(), reservation.expiresAt());
     PointsClient.PointReservationResult confirmation =
         pointsClient.confirmReservation(order.getPointsBusinessId());
     LotteryParticipation participation = participationRepository.saveAndFlush(

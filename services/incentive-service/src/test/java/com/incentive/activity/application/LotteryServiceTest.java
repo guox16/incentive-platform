@@ -33,6 +33,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class LotteryServiceTest {
   private static final Instant NOW = Instant.parse("2026-08-11T12:00:00Z");
   @Mock private LotteryOrderCreationService orderCreationService;
+  @Mock private LotteryOrderStateService orderStateService;
   @Mock private LotteryParticipationRepository participationRepository;
   @Mock private PendingAwardRepository pendingAwardRepository;
   @Mock private PointsClient pointsClient;
@@ -40,7 +41,7 @@ class LotteryServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new LotteryService(orderCreationService, participationRepository,
+    service = new LotteryService(orderCreationService, orderStateService, participationRepository,
         pendingAwardRepository, pointsClient, Clock.fixed(NOW, ZoneId.of("Asia/Shanghai")));
   }
 
@@ -55,6 +56,7 @@ class LotteryServiceTest {
     assertThat(response.pendingAwardCreated()).isTrue();
     assertThat(response.balanceAfter()).isEqualTo(90);
     verify(pointsClient).reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY");
+    verify(orderStateService).markPointsReserved(7001L, NOW.plusSeconds(300));
     verify(pointsClient).confirmReservation(9001L);
     verify(pendingAwardRepository).save(any(PendingAward.class));
   }

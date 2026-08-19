@@ -57,6 +57,8 @@ public class LotteryOrder {
   private long pointsCost;
   @Column(name = "points_business_id", nullable = false, updatable = false)
   private Long pointsBusinessId;
+  @Column(name = "points_reservation_expires_at")
+  private Instant pointsReservationExpiresAt;
   @Column(name = "eligibility_result", columnDefinition = "json", updatable = false)
   private String eligibilityResult;
   @Enumerated(EnumType.STRING)
@@ -128,6 +130,27 @@ public class LotteryOrder {
   public String getFailureCode() { return failureCode; }
   public int getRetryCount() { return retryCount; }
   public Instant getNextRetryAt() { return nextRetryAt; }
+  public Instant getPointsReservationExpiresAt() { return pointsReservationExpiresAt; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
+
+  public void markPointsReserved(Instant expiresAt, Instant now) {
+    Objects.requireNonNull(expiresAt, "积分预占过期时间不能为空");
+    Objects.requireNonNull(now, "状态更新时间不能为空");
+    if (status == LotteryOrderStatus.POINTS_RESERVED) {
+      if (!expiresAt.equals(pointsReservationExpiresAt)) {
+        throw new IllegalStateException("重复推进积分预占状态时过期时间不一致");
+      }
+      return;
+    }
+    if (status != LotteryOrderStatus.INIT) {
+      throw new IllegalStateException("只有INIT抽奖单可以进入POINTS_RESERVED状态");
+    }
+    status = LotteryOrderStatus.POINTS_RESERVED;
+    pointsReservationExpiresAt = expiresAt;
+    failureCode = null;
+    retryCount = 0;
+    nextRetryAt = null;
+    updatedAt = now;
+  }
 }

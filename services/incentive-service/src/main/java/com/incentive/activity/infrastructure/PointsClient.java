@@ -2,8 +2,6 @@ package com.incentive.activity.infrastructure;
 
 import com.incentive.activity.support.IncentiveBusinessException;
 import com.incentive.activity.security.InternalJwtTokenService;
-import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -16,17 +14,11 @@ import org.springframework.web.client.RestClientResponseException;
 public class PointsClient {
   private final RestClient restClient;
   private final InternalJwtTokenService tokenService;
-  private final Duration reservationTtl;
-  private final Clock clock;
 
   public PointsClient(RestClient.Builder builder, @Value("${clients.points.base-url}") String baseUrl,
-      InternalJwtTokenService tokenService,
-      @Value("${clients.points.reservation-ttl:PT5M}") Duration reservationTtl,
-      Clock clock) {
+      InternalJwtTokenService tokenService) {
     this.restClient = builder.baseUrl(baseUrl).build();
     this.tokenService = tokenService;
-    this.reservationTtl = reservationTtl;
-    this.clock = clock;
   }
 
   public PointCreditResult credit(Long businessId, Long userId, long amount) {
@@ -66,12 +58,10 @@ public class PointsClient {
   /** 预占积分；相同业务号重试时由积分服务返回原预占结果。 */
   public PointReservationResult reserve(
       Long businessId, Long userId, long amount, String source, String remark) {
-    Instant expiresAt = clock.instant().plus(reservationTtl);
     PointReservationResponse response = restClient.post()
         .uri("/api/v1/internal/points/reservations")
         .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
-        .body(new PointReservationRequest(
-            businessId, userId, amount, source, remark, expiresAt))
+        .body(new PointReservationRequest(businessId, userId, amount, source, remark))
         .retrieve()
         .body(PointReservationResponse.class);
     if (response == null) throw new IllegalStateException("积分服务未返回预占结果");
@@ -103,7 +93,7 @@ public class PointsClient {
   private record PointDebitRequest(Long businessId, Long userId, long amount, String source, String remark) {}
   private record PointDebitResponse(Long transactionId, long balanceAfter) {}
   private record PointReservationRequest(Long businessId, Long userId, long amount,
-                                         String source, String remark, Instant expiresAt) {}
+                                         String source, String remark) {}
   private record PointReservationResponse(Long businessId, long balanceAfter, String status,
                                           Long confirmedTransactionId, Instant expiresAt,
                                           boolean replayed) {}

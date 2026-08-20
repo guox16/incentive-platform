@@ -1,8 +1,10 @@
 package com.incentive.activity.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,18 +15,14 @@ import com.incentive.activity.domain.LotteryOrder;
 import com.incentive.activity.domain.LotteryParticipation;
 import com.incentive.activity.domain.LotteryPrize;
 import com.incentive.activity.domain.ParticipationRule;
-import com.incentive.activity.domain.PendingAward;
 import com.incentive.activity.domain.PrizeType;
 import com.incentive.activity.infrastructure.PointsClient;
-import com.incentive.activity.repository.LotteryParticipationRepository;
-import com.incentive.activity.repository.PendingAwardRepository;
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.InOrder;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -34,15 +32,14 @@ class LotteryServiceTest {
   private static final Instant NOW = Instant.parse("2026-08-11T12:00:00Z");
   @Mock private LotteryOrderCreationService orderCreationService;
   @Mock private LotteryOrderStateService orderStateService;
-  @Mock private LotteryParticipationRepository participationRepository;
-  @Mock private PendingAwardRepository pendingAwardRepository;
+  @Mock private LotteryParticipationStateService participationStateService;
   @Mock private PointsClient pointsClient;
   private LotteryService service;
 
   @BeforeEach
   void setUp() {
-    service = new LotteryService(orderCreationService, orderStateService, participationRepository,
-        pendingAwardRepository, pointsClient, Clock.fixed(NOW, ZoneId.of("Asia/Shanghai")));
+    service = new LotteryService(orderCreationService, orderStateService,
+        participationStateService, pointsClient);
   }
 
   @Test
@@ -58,7 +55,14 @@ class LotteryServiceTest {
     verify(pointsClient).reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY");
     verify(orderStateService).markPointsReserved(7001L, NOW.plusSeconds(300));
     verify(pointsClient).confirmReservation(9001L);
-    verify(pendingAwardRepository).save(any(PendingAward.class));
+    verify(participationStateService).complete(7001L, 44L);
+
+    InOrder flow = inOrder(pointsClient, orderStateService, participationStateService);
+    flow.verify(pointsClient).reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY");
+    flow.verify(orderStateService).markPointsReserved(7001L, NOW.plusSeconds(300));
+    flow.verify(participationStateService).saveWaiting(7001L);
+    flow.verify(pointsClient).confirmReservation(9001L);
+    flow.verify(participationStateService).complete(7001L, 44L);
   }
 
   @Test
@@ -70,10 +74,56 @@ class LotteryServiceTest {
 
     assertThat(response.won()).isFalse();
     assertThat(response.pendingAwardCreated()).isFalse();
-    verify(pendingAwardRepository, never()).save(any());
   }
 
-  private void arrange(LotteryOrder order) {
+  @Test
+  void retriesSameFlowAfterConfirmationWasInterrupted() {
+    LotteryOrder order = order(PrizeType.VIRTUAL);
+    arrange(order);
+    when(pointsClient.confirmReservation(9001L))
+        .thenThrow(new IllegalStateException("模拟确认积分时断网"))
+        .thenReturn(new PointsClient.PointReservationResult(
+            9001L, 90L, "CONFIRMED", 44L, NOW.plusSeconds(300), true));
+
+    assertThatThrownBy(() -> service.draw("SUMMER_LOTTERY", 7L, "request-1"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("模拟确认积分时断网");
+
+    var response = service.draw("SUMMER_LOTTERY", 7L, "request-1");
+
+    assertThat(response.participationId()).isEqualTo(51L);
+    assertThat(response.pointTransactionId()).isEqualTo(44L);
+    verify(pointsClient, times(2))
+        .reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY");
+    verify(participationStateService, times(2)).saveWaiting(7001L);
+    verify(pointsClient, times(2)).confirmReservation(9001L);
+    verify(participationStateService).complete(7001L, 44L);
+  }
+
+  @Test
+  void retriesFinalTransactionAfterPointsWereConfirmed() {
+    LotteryOrder order = order(PrizeType.VIRTUAL);
+    LotteryParticipation participation = arrange(order);
+    when(participationStateService.complete(7001L, 44L))
+        .thenThrow(new IllegalStateException("模拟最终本地事务失败"))
+        .thenAnswer(invocation -> {
+          participation.markSuccess(44L, NOW);
+          return new LotteryParticipationStateService.CompletionResult(participation, true);
+        });
+
+    assertThatThrownBy(() -> service.draw("SUMMER_LOTTERY", 7L, "request-1"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("模拟最终本地事务失败");
+
+    var response = service.draw("SUMMER_LOTTERY", 7L, "request-1");
+
+    assertThat(response.participationId()).isEqualTo(51L);
+    assertThat(response.pendingAwardCreated()).isTrue();
+    verify(pointsClient, times(2)).confirmReservation(9001L);
+    verify(participationStateService, times(2)).complete(7001L, 44L);
+  }
+
+  private LotteryParticipation arrange(LotteryOrder order) {
     when(orderCreationService.createOrGet("SUMMER_LOTTERY", 7L, "request-1"))
         .thenReturn(new LotteryOrderCreationService.CreationResult(order, false));
     when(pointsClient.reserve(9001L, 7L, 10L, "LOTTERY", "参与抽奖：SUMMER_LOTTERY"))
@@ -82,12 +132,15 @@ class LotteryServiceTest {
     when(pointsClient.confirmReservation(9001L))
         .thenReturn(new PointsClient.PointReservationResult(
             9001L, 90L, "CONFIRMED", 44L, NOW.plusSeconds(300), false));
-    when(participationRepository.saveAndFlush(any(LotteryParticipation.class)))
-        .thenAnswer(invocation -> {
-          LotteryParticipation participation = invocation.getArgument(0);
-          ReflectionTestUtils.setField(participation, "id", 51L);
-          return participation;
-        });
+    LotteryParticipation participation = new LotteryParticipation(order, NOW);
+    ReflectionTestUtils.setField(participation, "id", 51L);
+    when(participationStateService.saveWaiting(7001L)).thenReturn(participation);
+    when(participationStateService.complete(7001L, 44L)).thenAnswer(invocation -> {
+      participation.markSuccess(44L, NOW);
+      return new LotteryParticipationStateService.CompletionResult(
+          participation, order.getPrizeType() != PrizeType.NONE);
+    });
+    return participation;
   }
 
   private LotteryOrder order(PrizeType type) {

@@ -137,7 +137,9 @@ public class LotteryOrder {
   public void markPointsReserved(Instant expiresAt, Instant now) {
     Objects.requireNonNull(expiresAt, "积分预占过期时间不能为空");
     Objects.requireNonNull(now, "状态更新时间不能为空");
-    if (status == LotteryOrderStatus.POINTS_RESERVED) {
+    if (status == LotteryOrderStatus.POINTS_RESERVED
+        || status == LotteryOrderStatus.RESULT_SAVED
+        || status == LotteryOrderStatus.SUCCESS) {
       if (!expiresAt.equals(pointsReservationExpiresAt)) {
         throw new IllegalStateException("重复推进积分预占状态时过期时间不一致");
       }
@@ -148,6 +150,29 @@ public class LotteryOrder {
     }
     status = LotteryOrderStatus.POINTS_RESERVED;
     pointsReservationExpiresAt = expiresAt;
+    failureCode = null;
+    retryCount = 0;
+    nextRetryAt = null;
+    updatedAt = now;
+  }
+
+  public void markResultSaved(Instant now) {
+    Objects.requireNonNull(now, "状态更新时间不能为空");
+    if (status == LotteryOrderStatus.RESULT_SAVED || status == LotteryOrderStatus.SUCCESS) return;
+    if (status != LotteryOrderStatus.POINTS_RESERVED) {
+      throw new IllegalStateException("只有POINTS_RESERVED抽奖单可以进入RESULT_SAVED状态");
+    }
+    status = LotteryOrderStatus.RESULT_SAVED;
+    updatedAt = now;
+  }
+
+  public void markSuccess(Instant now) {
+    Objects.requireNonNull(now, "状态更新时间不能为空");
+    if (status == LotteryOrderStatus.SUCCESS) return;
+    if (status != LotteryOrderStatus.RESULT_SAVED) {
+      throw new IllegalStateException("只有RESULT_SAVED抽奖单可以进入SUCCESS状态");
+    }
+    status = LotteryOrderStatus.SUCCESS;
     failureCode = null;
     retryCount = 0;
     nextRetryAt = null;

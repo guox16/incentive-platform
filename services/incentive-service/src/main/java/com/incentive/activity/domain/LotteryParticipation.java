@@ -7,15 +7,25 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
+import java.util.Objects;
 
 @Entity
-@Table(name = "lottery_participations")
+@Table(name = "lottery_participations",
+    uniqueConstraints = @UniqueConstraint(name = "uk_lottery_participations_order",
+        columnNames = "lottery_order_id"),
+    indexes = @Index(name = "idx_lottery_participations_status_updated",
+        columnList = "status,updated_at"))
 public class LotteryParticipation {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
+
+  @Column(name = "lottery_order_id", nullable = false, updatable = false)
+  private Long lotteryOrderId;
 
   @Column(name = "activity_id", nullable = false, updatable = false)
   private Long activityId;
@@ -42,32 +52,22 @@ public class LotteryParticipation {
   private long pointsCost;
   @Column(name = "eligibility_result", columnDefinition = "json", updatable = false)
   private String eligibilityResult;
-  @Column(name = "point_transaction_id", nullable = false, updatable = false)
+  @Column(name = "point_transaction_id")
   private Long pointTransactionId;
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 24)
+  private LotteryParticipationStatus status;
+  @Column(name = "confirmed_at")
+  private Instant confirmedAt;
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
 
   protected LotteryParticipation() {}
 
-  public LotteryParticipation(IncentiveActivity activity, ParticipationRule rule, Long userId,
-      LotteryPrize prize, String eligibilityResult, Long pointTransactionId, Instant now) {
-    this.activityId = activity.getId();
-    this.ruleId = rule.getId();
-    this.ruleVersion = rule.getRuleVersion();
-    this.userId = userId;
-    this.lotteryPrizeId = prize.getId();
-    this.prizeId = prize.getPrizeId();
-    this.prizeName = prize.getPrizeName();
-    this.prizeType = prize.getPrizeType();
-    this.coverUrl = prize.getCoverUrl();
-    this.awardPayload = prize.getAwardPayload();
-    this.pointsCost = rule.getPointsCost();
-    this.eligibilityResult = eligibilityResult;
-    this.pointTransactionId = pointTransactionId;
-    this.createdAt = now;
-  }
-
-  public LotteryParticipation(LotteryOrder order, Long pointTransactionId, Instant now) {
+  public LotteryParticipation(LotteryOrder order, Instant now) {
+    this.lotteryOrderId = Objects.requireNonNull(order.getId(), "抽奖单ID不能为空");
     this.activityId = order.getActivityId();
     this.ruleId = order.getRuleId();
     this.ruleVersion = order.getRuleVersion();
@@ -80,11 +80,31 @@ public class LotteryParticipation {
     this.awardPayload = order.getAwardPayload();
     this.pointsCost = order.getPointsCost();
     this.eligibilityResult = order.getEligibilityResult();
-    this.pointTransactionId = pointTransactionId;
-    this.createdAt = now;
+    this.status = LotteryParticipationStatus.WAITING_CONFIRMATION;
+    this.createdAt = Objects.requireNonNull(now, "创建时间不能为空");
+    this.updatedAt = now;
+  }
+
+  public void markSuccess(Long transactionId, Instant now) {
+    Objects.requireNonNull(transactionId, "积分流水ID不能为空");
+    Objects.requireNonNull(now, "确认时间不能为空");
+    if (status == LotteryParticipationStatus.SUCCESS) {
+      if (!transactionId.equals(pointTransactionId)) {
+        throw new IllegalStateException("重复完成抽奖记录时积分流水ID不一致");
+      }
+      return;
+    }
+    if (status != LotteryParticipationStatus.WAITING_CONFIRMATION) {
+      throw new IllegalStateException("只有WAITING_CONFIRMATION抽奖记录可以完成");
+    }
+    pointTransactionId = transactionId;
+    status = LotteryParticipationStatus.SUCCESS;
+    confirmedAt = now;
+    updatedAt = now;
   }
 
   public Long getId() { return id; }
+  public Long getLotteryOrderId() { return lotteryOrderId; }
   public Long getUserId() { return userId; }
   public Long getPrizeId() { return prizeId; }
   public String getPrizeName() { return prizeName; }
@@ -93,5 +113,8 @@ public class LotteryParticipation {
   public String getAwardPayload() { return awardPayload; }
   public long getPointsCost() { return pointsCost; }
   public Long getPointTransactionId() { return pointTransactionId; }
+  public LotteryParticipationStatus getStatus() { return status; }
+  public Instant getConfirmedAt() { return confirmedAt; }
   public Instant getCreatedAt() { return createdAt; }
+  public Instant getUpdatedAt() { return updatedAt; }
 }

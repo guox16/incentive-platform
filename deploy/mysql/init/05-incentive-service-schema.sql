@@ -217,6 +217,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
 
 CREATE TABLE IF NOT EXISTS lottery_participations (
     id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '抽奖参与记录ID',
+    lottery_order_id      BIGINT UNSIGNED NOT NULL COMMENT '关联抽奖单ID，同时作为记录幂等键',
     activity_id           BIGINT UNSIGNED NOT NULL COMMENT '活动ID',
     rule_id               BIGINT UNSIGNED NOT NULL COMMENT '规则ID',
     rule_version          INT UNSIGNED NOT NULL COMMENT '规则版本快照',
@@ -229,15 +230,26 @@ CREATE TABLE IF NOT EXISTS lottery_participations (
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
     points_cost           BIGINT UNSIGNED NOT NULL COMMENT '本次扣除积分',
     eligibility_result    JSON NULL COMMENT '资格校验结果快照',
-    point_transaction_id  BIGINT UNSIGNED NOT NULL COMMENT '积分服务扣减流水ID',
+    point_transaction_id  BIGINT UNSIGNED NULL COMMENT '积分确认后返回的扣减流水ID',
+    status                VARCHAR(24) NOT NULL DEFAULT 'WAITING_CONFIRMATION' COMMENT 'WAITING_CONFIRMATION待确认积分、SUCCESS成功',
+    confirmed_at          DATETIME(3) NULL COMMENT '积分确认完成时间',
     created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '参与时间',
+    updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_lottery_participations_order (lottery_order_id),
     KEY idx_lottery_participations_user_time (user_id, created_at),
     KEY idx_lottery_participations_activity_user_time (activity_id, user_id, created_at),
+    KEY idx_lottery_participations_status_updated (status, updated_at),
+    CONSTRAINT fk_lottery_participations_order FOREIGN KEY (lottery_order_id) REFERENCES lottery_orders (id),
     CONSTRAINT fk_lottery_participations_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
     CONSTRAINT fk_lottery_participations_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
     CONSTRAINT fk_lottery_participations_prize FOREIGN KEY (lottery_prize_id) REFERENCES lottery_prizes (id),
-    CONSTRAINT chk_lottery_participations_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS', 'NONE'))
+    CONSTRAINT chk_lottery_participations_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS', 'NONE')),
+    CONSTRAINT chk_lottery_participations_status CHECK (status IN ('WAITING_CONFIRMATION', 'SUCCESS')),
+    CONSTRAINT chk_lottery_participations_confirmation CHECK (
+        (status = 'WAITING_CONFIRMATION' AND point_transaction_id IS NULL AND confirmed_at IS NULL)
+        OR (status = 'SUCCESS' AND point_transaction_id IS NOT NULL AND confirmed_at IS NOT NULL)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖参与结果与快照';
 
 CREATE TABLE IF NOT EXISTS redemption_records (

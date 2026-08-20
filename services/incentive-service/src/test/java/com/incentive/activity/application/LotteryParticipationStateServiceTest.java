@@ -164,7 +164,7 @@ class LotteryParticipationStateServiceTest {
     ReflectionTestUtils.setField(prize, "prizeType", type);
     LotteryOrder order = new LotteryOrder(7001L, "request-1", 7L, activity, rule, prize,
         9001L, "{\"passed\":true,\"usedTodayBefore\":0}", NOW);
-    order.markPointsReserved(NOW.plusSeconds(300), NOW);
+    order.markPointsReserved(NOW.plusSeconds(300), 90L, NOW);
     return order;
   }
 }

@@ -20,6 +20,28 @@ id-generator:
   worker-id: ${SNOWFLAKE_WORKER_ID:1}
 server: { port: 8085 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }
+xxl:
+  job:
+    admin:
+      addresses: "${XXL_JOB_ADMIN_ADDRESSES:http://xxl-job-admin:8080}"
+      timeout: ${XXL_JOB_ADMIN_TIMEOUT:3}
+    executor:
+      enabled: ${XXL_JOB_ENABLED:false}
+      appname: "${XXL_JOB_EXECUTOR_APP_NAME:incentive-lottery-service}"
+      access-token: "${XXL_JOB_ACCESS_TOKEN:}"
+      ip: "${XXL_JOB_EXECUTOR_IP:}"
+      address: "${XXL_JOB_EXECUTOR_ADDRESS:}"
+      port: ${XXL_JOB_EXECUTOR_PORT:9998}
+      log-path: "${XXL_JOB_LOG_PATH:./logs/xxl-job}"
+      log-retention-days: ${XXL_JOB_LOG_RETENTION_DAYS:30}
+lottery:
+  retry:
+    max-attempts: ${LOTTERY_RETRY_MAX_ATTEMPTS:5}
+    initial-delay: ${LOTTERY_RETRY_INITIAL_DELAY:PT5S}
+    max-delay: ${LOTTERY_RETRY_MAX_DELAY:PT5M}
+    stale-threshold: ${LOTTERY_RETRY_STALE_THRESHOLD:PT30S}
+    batch-size: ${LOTTERY_RETRY_BATCH_SIZE:100}
+    max-per-run: ${LOTTERY_RETRY_MAX_PER_RUN:1000}
 security:
   jwt:
     secret: "${JWT_SECRET:development-only-change-this-jwt-secret-now}"

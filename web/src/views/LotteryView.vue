@@ -111,10 +111,14 @@ async function draw() {
     resultOpen.value = true;
   } catch (error) {
     const outcomeUnknown = axios.isAxiosError(error) && !error.response;
-    if (!outcomeUnknown) clearRequestId(selectedActivity.code);
-    drawError.value = outcomeUnknown
-      ? '网络开了个小差，请再试一次。'
-      : getErrorMessage(error, '本次抽奖未完成，请稍后重试');
+    const errorData = axios.isAxiosError(error) ? error.response?.data as ApiError | undefined : undefined;
+    const retryScheduled = errorData?.code === 'LOTTERY_RETRY_SCHEDULED';
+    if (!outcomeUnknown && !retryScheduled) clearRequestId(selectedActivity.code);
+    drawError.value = retryScheduled
+      ? '抽奖正在处理中，请稍后再试。'
+      : outcomeUnknown
+        ? '网络开了个小差，请再试一次。'
+        : getErrorMessage(error, '本次抽奖未完成，请稍后重试');
   } finally {
     drawing.value = false;
   }

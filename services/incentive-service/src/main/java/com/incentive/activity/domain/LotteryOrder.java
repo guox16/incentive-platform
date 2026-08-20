@@ -22,7 +22,9 @@ import java.util.Objects;
     },
     indexes = {
         @Index(name = "idx_lottery_orders_user_created", columnList = "user_id,created_at"),
-        @Index(name = "idx_lottery_orders_status_updated", columnList = "status,updated_at")
+        @Index(name = "idx_lottery_orders_status_updated", columnList = "status,updated_at"),
+        @Index(name = "idx_lottery_orders_retry",
+            columnList = "status,next_retry_at,updated_at,id")
     })
 public class LotteryOrder {
   @Id
@@ -59,6 +61,8 @@ public class LotteryOrder {
   private Long pointsBusinessId;
   @Column(name = "points_reservation_expires_at")
   private Instant pointsReservationExpiresAt;
+  @Column(name = "points_balance_after")
+  private Long pointsBalanceAfter;
   @Column(name = "eligibility_result", columnDefinition = "json", updatable = false)
   private String eligibilityResult;
   @Enumerated(EnumType.STRING)
@@ -131,17 +135,20 @@ public class LotteryOrder {
   public int getRetryCount() { return retryCount; }
   public Instant getNextRetryAt() { return nextRetryAt; }
   public Instant getPointsReservationExpiresAt() { return pointsReservationExpiresAt; }
+  public Long getPointsBalanceAfter() { return pointsBalanceAfter; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 
-  public void markPointsReserved(Instant expiresAt, Instant now) {
+  public void markPointsReserved(Instant expiresAt, long balanceAfter, Instant now) {
     Objects.requireNonNull(expiresAt, "积分预占过期时间不能为空");
     Objects.requireNonNull(now, "状态更新时间不能为空");
+    if (balanceAfter < 0) throw new IllegalArgumentException("积分预占后余额不能为负数");
     if (status == LotteryOrderStatus.POINTS_RESERVED
         || status == LotteryOrderStatus.RESULT_SAVED
         || status == LotteryOrderStatus.SUCCESS) {
-      if (!expiresAt.equals(pointsReservationExpiresAt)) {
-        throw new IllegalStateException("重复推进积分预占状态时过期时间不一致");
+      if (!expiresAt.equals(pointsReservationExpiresAt)
+          || !Long.valueOf(balanceAfter).equals(pointsBalanceAfter)) {
+        throw new IllegalStateException("重复推进积分预占状态时返回快照不一致");
       }
       return;
     }
@@ -150,9 +157,8 @@ public class LotteryOrder {
     }
     status = LotteryOrderStatus.POINTS_RESERVED;
     pointsReservationExpiresAt = expiresAt;
-    failureCode = null;
-    retryCount = 0;
-    nextRetryAt = null;
+    pointsBalanceAfter = balanceAfter;
+    clearFailure();
     updatedAt = now;
   }
 
@@ -163,6 +169,7 @@ public class LotteryOrder {
       throw new IllegalStateException("只有POINTS_RESERVED抽奖单可以进入RESULT_SAVED状态");
     }
     status = LotteryOrderStatus.RESULT_SAVED;
+    clearFailure();
     updatedAt = now;
   }
 
@@ -173,9 +180,41 @@ public class LotteryOrder {
       throw new IllegalStateException("只有RESULT_SAVED抽奖单可以进入SUCCESS状态");
     }
     status = LotteryOrderStatus.SUCCESS;
-    failureCode = null;
-    retryCount = 0;
-    nextRetryAt = null;
+    clearFailure();
     updatedAt = now;
+  }
+
+  public void scheduleRetry(String code, Instant retryAt, Instant now) {
+    String normalizedCode = requireText(code, "失败码不能为空");
+    Objects.requireNonNull(retryAt, "下次重试时间不能为空");
+    Objects.requireNonNull(now, "失败记录时间不能为空");
+    if (status == LotteryOrderStatus.SUCCESS || status == LotteryOrderStatus.FAILED) {
+      throw new IllegalStateException("终态抽奖单不能安排重试");
+    }
+    if (!retryAt.isAfter(now)) {
+      throw new IllegalArgumentException("下次重试时间必须晚于当前时间");
+    }
+    failureCode = normalizedCode;
+    retryCount = Math.addExact(retryCount, 1);
+    nextRetryAt = retryAt;
+    updatedAt = now;
+  }
+
+  public void markFailed(String code, Instant now) {
+    failureCode = requireText(code, "失败码不能为空");
+    Objects.requireNonNull(now, "失败记录时间不能为空");
+    if (status == LotteryOrderStatus.SUCCESS) {
+      throw new IllegalStateException("成功抽奖单不能标记失败");
+    }
+    if (status == LotteryOrderStatus.FAILED) return;
+    retryCount = Math.addExact(retryCount, 1);
+    nextRetryAt = null;
+    status = LotteryOrderStatus.FAILED;
+    updatedAt = now;
+  }
+
+  private void clearFailure() {
+    failureCode = null;
+    nextRetryAt = null;
   }
 }

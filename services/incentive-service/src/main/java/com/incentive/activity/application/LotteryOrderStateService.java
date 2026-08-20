@@ -21,10 +21,10 @@ public class LotteryOrderStateService {
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void markPointsReserved(Long orderId, Instant expiresAt) {
+  public void markPointsReserved(Long orderId, Instant expiresAt, long balanceAfter) {
     LotteryOrder order = orderRepository.findByIdForUpdate(orderId)
         .orElseThrow(() -> new IncentiveBusinessException(
             "LOTTERY_ORDER_NOT_FOUND", "抽奖单不存在", HttpStatus.NOT_FOUND));
-    order.markPointsReserved(expiresAt, clock.instant());
+    order.markPointsReserved(expiresAt, balanceAfter, clock.instant());
   }
 }

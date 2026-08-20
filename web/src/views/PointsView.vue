@@ -3,6 +3,7 @@ import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
+import { getCurrentUserId } from '../api/auth';
 import AccountHeader from '../components/AccountHeader.vue';
 import type {
   ApiError,
@@ -38,7 +39,8 @@ const groupedRecords = computed(() => {
   return [...groups.entries()].map(([date, entries]) => ({ date, entries }));
 });
 const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(balance.value));
-const checkedInToday = computed(() => checkIn.value?.checkedInToday ?? false);
+const checkInCompleted = computed(() =>
+  checkIn.value?.checkedInToday === true && checkIn.value.rewardStatus === 'AWARDED');
 const monthLabel = computed(() => {
   const date = parseBusinessDate(checkIn.value?.businessDate);
   return `${date.getFullYear()}年${date.getMonth() + 1}月`;
@@ -87,6 +89,23 @@ function getErrorMessage(requestError: unknown, fallback = '暂时无法获取�
   return fallback;
 }
 
+function checkInRequestStorageKey() {
+  return `checkInRequestId:${getCurrentUserId() ?? 'unknown'}`;
+}
+
+function getOrCreateCheckInRequestId() {
+  const key = checkInRequestStorageKey();
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const requestId = crypto.randomUUID();
+  localStorage.setItem(key, requestId);
+  return requestId;
+}
+
+function clearCheckInRequestId() {
+  localStorage.removeItem(checkInRequestStorageKey());
+}
+
 async function loadPoints() {
   loading.value = true;
   error.value = '';
@@ -99,6 +118,7 @@ async function loadPoints() {
     balance.value = balanceResponse.data.balance;
     records.value = transactionsResponse.data.items.map(toPointRecord);
     checkIn.value = checkInResponse.data;
+    if (checkInResponse.data.rewardStatus === 'AWARDED') clearCheckInRequestId();
   } catch (requestError) {
     if (axios.isAxiosError(requestError) && requestError.response?.status === 401) { await router.replace('/login'); return; }
     error.value = getErrorMessage(requestError);
@@ -108,21 +128,29 @@ async function loadPoints() {
 }
 
 async function performCheckIn() {
-  if (checkingIn.value || checkedInToday.value) return;
+  if (checkingIn.value || checkInCompleted.value) return;
   checkingIn.value = true;
   checkInError.value = '';
   checkInFeedback.value = '';
   try {
-    const response = await http.post<DailyCheckInResponse>('/activities/check-ins/me');
+    const requestId = getOrCreateCheckInRequestId();
+    const response = await http.post<DailyCheckInResponse>('/activities/check-ins/me', null, {
+      headers: { 'Idempotency-Key': requestId },
+    });
     checkIn.value = response.data;
+    if (response.data.rewardStatus === 'AWARDED') clearCheckInRequestId();
     if (response.data.balanceAfter !== null) balance.value = response.data.balanceAfter;
-    const [balanceResponse, transactionsResponse] = await Promise.all([
-      http.get<PointBalanceResponse>('/points/me/balance'),
-      http.get<PointTransactionPageResponse>('/points/me/transactions', { params: { page: 0, size: 100 } }),
-    ]);
-    balance.value = balanceResponse.data.balance;
-    records.value = transactionsResponse.data.items.map(toPointRecord);
     checkInFeedback.value = `签到成功，获得 ${response.data.rewardPoints} 积分`;
+    try {
+      const [balanceResponse, transactionsResponse] = await Promise.all([
+        http.get<PointBalanceResponse>('/points/me/balance'),
+        http.get<PointTransactionPageResponse>('/points/me/transactions', { params: { page: 0, size: 100 } }),
+      ]);
+      balance.value = balanceResponse.data.balance;
+      records.value = transactionsResponse.data.items.map(toPointRecord);
+    } catch {
+      checkInFeedback.value = `签到成功，获得 ${response.data.rewardPoints} 积分；积分明细稍后刷新`;
+    }
   } catch (requestError) {
     checkInError.value = getErrorMessage(requestError, '签到未完成，请稍后重试');
   } finally {
@@ -171,9 +199,9 @@ onMounted(loadPoints);
           <div class="balance-copy"><span id="balance-title">当前可用积分</span><strong>{{ formattedBalance }}</strong><p>积分可用于参与活动或兑换商品，以实际规则为准。</p></div>
           <div class="check-in-area">
             <div class="check-in-heading"><svg><use href="#points-calendar" /></svg><div><h1>每日签到</h1><p>每天签到，积累下一次收获</p></div></div>
-            <button class="check-in-button" type="button" :disabled="checkingIn || checkedInToday" @click="performCheckIn">
+            <button class="check-in-button" type="button" :disabled="checkingIn || checkInCompleted" @click="performCheckIn">
               <span v-if="checkingIn" class="button-spinner" aria-hidden="true"></span>
-              <span>{{ checkingIn ? '签到处理中' : checkedInToday ? '今日已签到' : '今日签到' }}</span>
+              <span>{{ checkingIn ? '签到处理中' : checkInCompleted ? '今日已签到' : checkIn?.rewardStatus === 'PENDING' ? '重试积分发放' : '今日签到' }}</span>
               <b v-if="!checkingIn">+{{ checkIn?.rewardPoints ?? 10 }}</b>
             </button>
             <p class="streak-copy">连续签到 <strong>{{ checkIn?.currentStreak ?? 0 }}</strong> 天</p>

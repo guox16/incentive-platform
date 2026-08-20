@@ -11,7 +11,11 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 @Validated
 @RestController
@@ -30,7 +34,10 @@ public class DailyCheckInController {
 
   @PostMapping
   @Operation(summary = "完成今日签到")
-  public DailyCheckInResponse checkIn(@AuthenticationPrincipal Jwt jwt) {
-    return service.checkIn(JwtUserId.from(jwt));
+  public DailyCheckInResponse checkIn(@AuthenticationPrincipal Jwt jwt,
+      @RequestHeader("Idempotency-Key")
+      @NotBlank @Size(max = 64)
+      @Pattern(regexp = "[A-Za-z0-9._:-]+") String requestId) {
+    return service.checkIn(JwtUserId.from(jwt), requestId.trim());
   }
 }

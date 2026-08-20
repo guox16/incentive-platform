@@ -23,14 +23,20 @@ public class PointsClient {
   }
 
   public PointCreditResult credit(Long businessId, Long userId, long amount) {
-    PointCreditResponse response = restClient.post()
-        .uri("/api/v1/internal/points/credit")
-        .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
-        .body(new PointCreditRequest(businessId, userId, amount, "CHECK_IN", "每日签到奖励"))
-        .retrieve()
-        .body(PointCreditResponse.class);
-    if (response == null) throw new IllegalStateException("积分服务未返回发放结果");
-    return new PointCreditResult(response.transactionId(), response.balanceAfter());
+    try {
+      PointCreditResponse response = restClient.post()
+          .uri("/api/v1/internal/points/credit")
+          .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
+          .body(new PointCreditRequest(businessId, userId, amount, "CHECK_IN", "每日签到奖励"))
+          .retrieve()
+          .body(PointCreditResponse.class);
+      if (response == null) throw new RestClientException("积分服务未返回发放结果");
+      return new PointCreditResult(response.transactionId(), response.balanceAfter());
+    } catch (RestClientException ex) {
+      throw new IncentiveBusinessException(
+          "CHECK_IN_REWARD_PENDING", "签到已记录，积分发放暂未完成，请重试",
+          HttpStatus.SERVICE_UNAVAILABLE);
+    }
   }
 
   public PointDebitResult debit(Long businessId, Long userId, long amount, String source, String remark) {

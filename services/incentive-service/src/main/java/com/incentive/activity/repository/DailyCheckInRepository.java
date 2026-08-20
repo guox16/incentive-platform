@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface DailyCheckInRepository extends JpaRepository<DailyCheckIn, Long> {
+  Optional<DailyCheckIn> findByRequestId(String requestId);
   Optional<DailyCheckIn> findByUserIdAndCheckInDate(Long userId, LocalDate checkInDate);
   Optional<DailyCheckIn> findTopByUserIdOrderByCheckInDateDesc(Long userId);
   List<DailyCheckIn> findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(

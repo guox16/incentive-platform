@@ -14,11 +14,17 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "daily_check_ins",
-    uniqueConstraints = @UniqueConstraint(name = "uk_daily_check_ins_user_date", columnNames = {"user_id", "check_in_date"}))
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_daily_check_ins_request_id", columnNames = "request_id"),
+        @UniqueConstraint(name = "uk_daily_check_ins_user_date", columnNames = {"user_id", "check_in_date"})
+    })
 public class DailyCheckIn {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
+
+  @Column(name = "request_id", nullable = false, updatable = false, length = 64)
+  private String requestId;
 
   @Column(name = "user_id", nullable = false, updatable = false)
   private Long userId;
@@ -53,7 +59,9 @@ public class DailyCheckIn {
 
   protected DailyCheckIn() {}
 
-  public DailyCheckIn(Long userId, LocalDate checkInDate, int streakDays, long rewardPoints, Instant now) {
+  public DailyCheckIn(String requestId, Long userId, LocalDate checkInDate, int streakDays,
+      long rewardPoints, Instant now) {
+    this.requestId = requestId;
     this.userId = userId;
     this.checkInDate = checkInDate;
     this.streakDays = streakDays;
@@ -72,6 +80,7 @@ public class DailyCheckIn {
   }
 
   public Long getId() { return id; }
+  public String getRequestId() { return requestId; }
   public Long getUserId() { return userId; }
   public LocalDate getCheckInDate() { return checkInDate; }
   public int getStreakDays() { return streakDays; }

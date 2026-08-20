@@ -3,6 +3,7 @@ package com.incentive.activity.controller;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -49,5 +50,30 @@ class DailyCheckInControllerTest {
   void rejectsCheckInWithoutJwt() throws Exception {
     mockMvc.perform(get("/api/v1/activities/check-ins/me").header("X-User-Id", "1"))
         .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void passesIdempotencyKeyToCheckInService() throws Exception {
+    when(service.checkIn(1L, "request-123")).thenReturn(new DailyCheckInResponse(
+        1L, LocalDate.of(2026, 8, 7), true, 1, 10, "AWARDED",
+        21L, 31L, 110L, List.of(LocalDate.of(2026, 8, 7))));
+
+    mockMvc.perform(post("/api/v1/activities/check-ins/me")
+            .with(jwt().jwt(token -> token.subject("1"))
+                .authorities(new SimpleGrantedAuthority("CHECK_IN")))
+            .header("Idempotency-Key", "request-123"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.checkInId").value(21))
+        .andExpect(jsonPath("$.rewardStatus").value("AWARDED"));
+
+    verify(service).checkIn(1L, "request-123");
+  }
+
+  @Test
+  void rejectsCheckInWithoutIdempotencyKey() throws Exception {
+    mockMvc.perform(post("/api/v1/activities/check-ins/me")
+            .with(jwt().jwt(token -> token.subject("1"))
+                .authorities(new SimpleGrantedAuthority("CHECK_IN"))))
+        .andExpect(status().isBadRequest());
   }
 }

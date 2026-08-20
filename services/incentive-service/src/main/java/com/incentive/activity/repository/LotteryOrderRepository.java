@@ -27,7 +27,7 @@ public interface LotteryOrderRepository extends JpaRepository<LotteryOrder, Long
       + "or (lotteryOrder.nextRetryAt is null and lotteryOrder.updatedAt <= :staleBefore)) "
       + "and mod(lotteryOrder.id, :shardTotal) = :shardIndex "
       + "order by lotteryOrder.updatedAt, lotteryOrder.id")
-  List<Long> findRecoverableOrderIds(@Param("now") Instant now,
+  List<Long> findReconciliationOrderIds(@Param("now") Instant now,
       @Param("staleBefore") Instant staleBefore,
       @Param("shardIndex") int shardIndex, @Param("shardTotal") int shardTotal,
       Pageable pageable);

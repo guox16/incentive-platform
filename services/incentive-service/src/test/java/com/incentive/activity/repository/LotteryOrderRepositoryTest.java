@@ -30,7 +30,7 @@ class LotteryOrderRepositoryTest {
     repository.saveAndFlush(due);
     repository.saveAndFlush(stale);
 
-    var ids = repository.findRecoverableOrderIds(
+    var ids = repository.findReconciliationOrderIds(
         NOW.plusSeconds(40), NOW.plusSeconds(10), 0, 1, PageRequest.of(0, 10));
 
     assertThat(ids).containsExactlyInAnyOrder(7001L, 7002L);

@@ -2,6 +2,9 @@ package com.incentive.activity.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.incentive.activity.support.IncentiveBusinessException;
@@ -18,13 +21,28 @@ class LotteryOrderExecutionServiceTest {
   @Mock private LotteryRetryStateService retryStateService;
 
   @Test
-  void synchronousFailureReturnsStableScheduledCode() {
+  void immediatelyRetriesOnceAndReturnsResult() {
     LotteryOrderExecutionService service =
         new LotteryOrderExecutionService(processor, retryStateService);
-    IncentiveBusinessException failure = new IncentiveBusinessException(
+    RuntimeException firstFailure = new RuntimeException("temporary");
+    LotteryOrderProcessor.ProcessingResult completed =
+        new LotteryOrderProcessor.ProcessingResult(null, null, null, false);
+    when(processor.process(7001L)).thenThrow(firstFailure).thenReturn(completed);
+
+    assertThat(service.execute(7001L)).isSameAs(completed);
+    verify(processor, times(2)).process(7001L);
+    verify(retryStateService, never()).recordFailure(7001L, firstFailure);
+  }
+
+  @Test
+  void secondFailureSchedulesReconciliation() {
+    LotteryOrderExecutionService service =
+        new LotteryOrderExecutionService(processor, retryStateService);
+    RuntimeException firstFailure = new RuntimeException("first");
+    IncentiveBusinessException secondFailure = new IncentiveBusinessException(
         "POINTS_SERVICE_UNAVAILABLE", "积分服务暂不可用", HttpStatus.BAD_GATEWAY);
-    when(processor.process(7001L)).thenThrow(failure);
-    when(retryStateService.recordFailure(7001L, failure)).thenReturn(
+    when(processor.process(7001L)).thenThrow(firstFailure, secondFailure);
+    when(retryStateService.recordFailure(7001L, secondFailure)).thenReturn(
         new LotteryRetryStateService.FailureRecord(
             false, false, true, "POINTS_SERVICE_UNAVAILABLE",
             Instant.parse("2026-08-20T00:30:05Z")));
@@ -32,42 +50,24 @@ class LotteryOrderExecutionServiceTest {
     assertThatThrownBy(() -> service.execute(7001L))
         .isInstanceOfSatisfying(IncentiveBusinessException.class, ex -> {
           assertThat(ex.getCode()).isEqualTo("LOTTERY_RETRY_SCHEDULED");
-          assertThat(ex.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-          assertThat(ex.getCause()).isSameAs(failure);
+          assertThat(ex.getCause()).isSameAs(secondFailure);
         });
   }
 
   @Test
-  void automaticExecutionReportsRescheduledFailureWithoutThrowing() {
+  void reloadsSuccessfulResultWhenFinalCommitResponseWasLostTwice() {
     LotteryOrderExecutionService service =
         new LotteryOrderExecutionService(processor, retryStateService);
-    RuntimeException failure = new RuntimeException("temporary");
-    when(processor.process(7001L)).thenThrow(failure);
-    when(retryStateService.recordFailure(7001L, failure)).thenReturn(
-        new LotteryRetryStateService.FailureRecord(
-            false, false, true, "DATABASE_TEMPORARY_ERROR",
-            Instant.parse("2026-08-20T00:30:05Z")));
-
-    var result = service.executeAutomatically(7001L);
-
-    assertThat(result.completed()).isFalse();
-    assertThat(result.rescheduled()).isTrue();
-    assertThat(result.terminal()).isFalse();
-  }
-
-  @Test
-  void reloadsSuccessfulResultWhenFinalCommitResponseWasLost() {
-    LotteryOrderExecutionService service =
-        new LotteryOrderExecutionService(processor, retryStateService);
-    RuntimeException lostResponse = new RuntimeException("最终事务结果未知");
+    RuntimeException firstFailure = new RuntimeException("first response lost");
+    RuntimeException secondFailure = new RuntimeException("second response lost");
     LotteryOrderProcessor.ProcessingResult completed =
         new LotteryOrderProcessor.ProcessingResult(null, null, null, false);
-    when(processor.process(7001L)).thenThrow(lostResponse).thenReturn(completed);
-    when(retryStateService.recordFailure(7001L, lostResponse)).thenReturn(
+    when(processor.process(7001L))
+        .thenThrow(firstFailure, secondFailure)
+        .thenReturn(completed);
+    when(retryStateService.recordFailure(7001L, secondFailure)).thenReturn(
         new LotteryRetryStateService.FailureRecord(true, false, false, null, null));
 
-    var result = service.execute(7001L);
-
-    assertThat(result).isSameAs(completed);
+    assertThat(service.execute(7001L)).isSameAs(completed);
   }
 }

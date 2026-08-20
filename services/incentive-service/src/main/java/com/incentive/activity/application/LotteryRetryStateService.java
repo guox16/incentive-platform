@@ -4,7 +4,9 @@ import com.incentive.activity.domain.LotteryOrder;
 import com.incentive.activity.domain.LotteryOrderStatus;
 import com.incentive.activity.repository.LotteryOrderRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,12 +16,40 @@ public class LotteryRetryStateService {
   private final LotteryOrderRepository orderRepository;
   private final LotteryRetryPolicy retryPolicy;
   private final Clock clock;
+  private final Duration reconciliationDelay;
 
   public LotteryRetryStateService(LotteryOrderRepository orderRepository,
-      LotteryRetryPolicy retryPolicy, Clock clock) {
+      LotteryRetryPolicy retryPolicy, Clock clock,
+      @Value("${lottery.retry.reconciliation-delay:PT5S}") Duration reconciliationDelay) {
+    if (reconciliationDelay.isNegative() || reconciliationDelay.isZero()) {
+      throw new IllegalArgumentException("抽奖对账延迟必须大于0");
+    }
     this.orderRepository = orderRepository;
     this.retryPolicy = retryPolicy;
     this.clock = clock;
+    this.reconciliationDelay = reconciliationDelay;
+  }
+
+  /** 对账暂时无法取得积分状态时延后再次查询，不再执行业务命令。 */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void deferReconciliation(Long orderId, Throwable failure) {
+    LotteryOrder order = orderRepository.findByIdForUpdate(orderId).orElse(null);
+    if (order == null || order.getStatus() == LotteryOrderStatus.SUCCESS
+        || order.getStatus() == LotteryOrderStatus.FAILED) return;
+    LotteryRetryPolicy.Decision decision = retryPolicy.decide(failure);
+    Instant now = clock.instant();
+    order.scheduleRetry(decision.failureCode(), now.plus(reconciliationDelay), now);
+  }
+
+  /** 只有积分已取消、已过期或确认不存在后，才把抽奖单置为失败。 */
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public boolean markReconciledFailed(Long orderId, String failureCode) {
+    LotteryOrder order = orderRepository.findByIdForUpdate(orderId).orElse(null);
+    if (order == null || order.getStatus() == LotteryOrderStatus.SUCCESS) return false;
+    if (order.getStatus() != LotteryOrderStatus.FAILED) {
+      order.markFailed(failureCode, clock.instant());
+    }
+    return true;
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -36,9 +66,10 @@ public class LotteryRetryStateService {
     }
 
     Instant now = clock.instant();
-    LotteryRetryPolicy.Decision decision = retryPolicy.decide(failure, order.getRetryCount());
-    if (decision.retryable()) {
-      Instant retryAt = now.plus(decision.delay());
+    LotteryRetryPolicy.Decision decision = retryPolicy.decide(failure);
+    // 已发生积分侧动作的订单必须先对账；INIT 的暂态异常也可能是响应丢失。
+    if (decision.transientFailure() || order.getStatus() != LotteryOrderStatus.INIT) {
+      Instant retryAt = now.plus(reconciliationDelay);
       order.scheduleRetry(decision.failureCode(), retryAt, now);
       return new FailureRecord(false, false, true, decision.failureCode(), retryAt);
     }

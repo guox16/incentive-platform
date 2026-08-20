@@ -136,7 +136,7 @@ VALUES (
     'pointReservationCompensationJob', '', 'SERIAL_EXECUTION', 50,
     2, 'BEAN', '', '初始化', NOW(), '', 0, 0, 0);
 
--- 抽奖中间态恢复任务默认启用；处理器按持久化状态和固定业务号幂等续跑。
+-- 抽奖异常对账任务默认启用；只查询既有积分预占并补全成功或取消失败。
 INSERT IGNORE INTO xxl_job_info (
     id, job_group, job_desc, add_time, update_time, author, alarm_email,
     schedule_type, schedule_conf, misfire_strategy, executor_route_strategy,
@@ -144,7 +144,7 @@ INSERT IGNORE INTO xxl_job_info (
     executor_fail_retry_count, glue_type, glue_source, glue_remark, glue_updatetime,
     child_jobid, trigger_status, trigger_last_time, trigger_next_time)
 VALUES (
-    1002, 1002, '抽奖单自动重试', NOW(), NOW(), 'system', '',
+    1002, 1002, '抽奖单异常对账', NOW(), NOW(), 'system', '',
     'CRON', '0/10 * * * * ?', 'DO_NOTHING', 'SHARDING_BROADCAST',
-    'lotteryOrderRetryJob', '', 'SERIAL_EXECUTION', 50,
+    'lotteryOrderReconciliationJob', '', 'SERIAL_EXECUTION', 50,
     0, 'BEAN', '', '初始化', NOW(), '', 1, 0, 0);

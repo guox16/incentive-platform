@@ -95,6 +95,38 @@ public class PointsClient {
     }
   }
 
+  /** 查询既有积分预占，供异常抽奖流程对账使用。 */
+  public PointReservationResult getReservation(Long businessId) {
+    try {
+      PointReservationResponse response = restClient.get()
+          .uri("/api/v1/internal/points/reservations/{businessId}", businessId)
+          .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
+          .retrieve()
+          .body(PointReservationResponse.class);
+      return requireReservationResponse(response, "积分服务未返回预占查询结果");
+    } catch (RestClientResponseException ex) {
+      throw translateReservationError(ex);
+    } catch (RestClientException ex) {
+      throw pointsUnavailable();
+    }
+  }
+
+  /** 取消尚未确认的积分预占并退回积分。 */
+  public PointReservationResult cancelReservation(Long businessId) {
+    try {
+      PointReservationResponse response = restClient.post()
+          .uri("/api/v1/internal/points/reservations/{businessId}/cancel", businessId)
+          .headers(headers -> headers.setBearerAuth(tokenService.issuePointsCommandToken()))
+          .retrieve()
+          .body(PointReservationResponse.class);
+      return requireReservationResponse(response, "积分服务未返回预占取消结果");
+    } catch (RestClientResponseException ex) {
+      throw translateReservationError(ex);
+    } catch (RestClientException ex) {
+      throw pointsUnavailable();
+    }
+  }
+
   private PointReservationResult requireReservationResponse(
       PointReservationResponse response, String message) {
     if (response == null) throw invalidResponse(message);

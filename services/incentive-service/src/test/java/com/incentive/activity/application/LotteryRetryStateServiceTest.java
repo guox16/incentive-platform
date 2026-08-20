@@ -35,10 +35,9 @@ class LotteryRetryStateServiceTest {
 
   @BeforeEach
   void setUp() {
-    LotteryRetryPolicy policy =
-        new LotteryRetryPolicy(5, Duration.ofSeconds(5), Duration.ofMinutes(1));
+    LotteryRetryPolicy policy = new LotteryRetryPolicy();
     service = new LotteryRetryStateService(
-        orderRepository, policy, Clock.fixed(NOW, ZoneOffset.UTC));
+        orderRepository, policy, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(5));
   }
 
   @Test
@@ -66,6 +65,19 @@ class LotteryRetryStateServiceTest {
     assertThat(order.getStatus()).isEqualTo(LotteryOrderStatus.FAILED);
     assertThat(order.getFailureCode()).isEqualTo("INSUFFICIENT_POINTS");
     assertThat(order.getNextRetryAt()).isNull();
+  }
+
+  @Test
+  void advancedOrderIsReconciledBeforePermanentFailure() {
+    LotteryOrder order = order();
+    order.markPointsReserved(NOW.plusSeconds(300), 90L, NOW);
+    when(orderRepository.findByIdForUpdate(7001L)).thenReturn(Optional.of(order));
+
+    var record = service.recordFailure(7001L, failure("POINT_RESERVATION_EXPIRED"));
+
+    assertThat(record.retryScheduled()).isTrue();
+    assertThat(order.getStatus()).isEqualTo(LotteryOrderStatus.POINTS_RESERVED);
+    assertThat(order.getNextRetryAt()).isEqualTo(NOW.plusSeconds(5));
   }
 
   private IncentiveBusinessException failure(String code) {

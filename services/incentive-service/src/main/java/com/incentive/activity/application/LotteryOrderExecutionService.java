@@ -18,33 +18,25 @@ public class LotteryOrderExecutionService {
   public LotteryOrderProcessor.ProcessingResult execute(Long orderId) {
     try {
       return processor.process(orderId);
-    } catch (RuntimeException failure) {
-      LotteryRetryStateService.FailureRecord record = recordFailure(orderId, failure);
-      if (record.alreadySucceeded()) {
+    } catch (RuntimeException firstFailure) {
+      try {
+        // 同一订单、同一积分业务号立即续跑一次，覆盖短暂网络抖动和响应丢失。
         return processor.process(orderId);
+      } catch (RuntimeException secondFailure) {
+        if (firstFailure != secondFailure) firstFailure.addSuppressed(secondFailure);
+        LotteryRetryStateService.FailureRecord record = recordFailure(orderId, secondFailure);
+        if (record.alreadySucceeded()) {
+          return processor.process(orderId);
+        }
+        if (record.retryScheduled()) {
+          IncentiveBusinessException scheduled = new IncentiveBusinessException(
+              "LOTTERY_RETRY_SCHEDULED", "抽奖正在处理中，请稍后重试",
+              HttpStatus.SERVICE_UNAVAILABLE);
+          scheduled.initCause(secondFailure);
+          throw scheduled;
+        }
+        throw secondFailure;
       }
-      if (record.retryScheduled()) {
-        IncentiveBusinessException scheduled = new IncentiveBusinessException(
-            "LOTTERY_RETRY_SCHEDULED", "抽奖正在处理中，请稍后重试", HttpStatus.SERVICE_UNAVAILABLE);
-        scheduled.initCause(failure);
-        throw scheduled;
-      }
-      throw failure;
-    }
-  }
-
-  public AutomaticExecutionResult executeAutomatically(Long orderId) {
-    try {
-      processor.process(orderId);
-      return new AutomaticExecutionResult(true, false, false, null);
-    } catch (RuntimeException failure) {
-      LotteryRetryStateService.FailureRecord record = recordFailure(orderId, failure);
-      if (record.alreadySucceeded()) {
-        processor.process(orderId);
-        return new AutomaticExecutionResult(true, false, false, null);
-      }
-      return new AutomaticExecutionResult(
-          false, record.retryScheduled(), record.terminal(), record.failureCode());
     }
   }
 
@@ -57,7 +49,4 @@ public class LotteryOrderExecutionService {
       throw failure;
     }
   }
-
-  public record AutomaticExecutionResult(
-      boolean completed, boolean rescheduled, boolean terminal, String failureCode) {}
 }

@@ -1,64 +1,29 @@
 package com.incentive.activity.application;
 
 import com.incentive.activity.support.IncentiveBusinessException;
-import java.time.Duration;
 import java.util.Set;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
+/** 只负责识别异常性质；业务链路是否重试由执行入口固定控制为一次。 */
 @Component
 public class LotteryRetryPolicy {
-  private static final Set<String> RETRYABLE_CODES = Set.of(
+  private static final Set<String> TRANSIENT_CODES = Set.of(
       "POINTS_SERVICE_UNAVAILABLE",
       "POINTS_SERVICE_ERROR",
       "POINTS_SERVICE_INVALID_RESPONSE",
       "POINTS_COMMAND_CONFLICT");
 
-  private final int maxAttempts;
-  private final Duration initialDelay;
-  private final Duration maxDelay;
-
-  public LotteryRetryPolicy(
-      @Value("${lottery.retry.max-attempts:5}") int maxAttempts,
-      @Value("${lottery.retry.initial-delay:PT5S}") Duration initialDelay,
-      @Value("${lottery.retry.max-delay:PT5M}") Duration maxDelay) {
-    if (maxAttempts <= 0 || initialDelay.isNegative() || initialDelay.isZero()
-        || maxDelay.compareTo(initialDelay) < 0) {
-      throw new IllegalArgumentException("抽奖重试参数不合法");
-    }
-    this.maxAttempts = maxAttempts;
-    this.initialDelay = initialDelay;
-    this.maxDelay = maxDelay;
-  }
-
-  public Decision decide(Throwable failure, int previousFailures) {
+  public Decision decide(Throwable failure) {
     IncentiveBusinessException businessFailure = findBusinessFailure(failure);
-    String code;
-    boolean retryable;
     if (businessFailure != null) {
-      code = businessFailure.getCode();
-      retryable = RETRYABLE_CODES.contains(code);
-    } else if (findDataAccessFailure(failure)) {
-      code = "DATABASE_TEMPORARY_ERROR";
-      retryable = true;
-    } else {
-      code = "LOTTERY_PROCESSING_ERROR";
-      retryable = false;
+      String code = businessFailure.getCode();
+      return new Decision(code, TRANSIENT_CODES.contains(code));
     }
-
-    int failuresAfterRecord = Math.addExact(previousFailures, 1);
-    boolean schedule = retryable && failuresAfterRecord < maxAttempts;
-    return new Decision(code, schedule, schedule ? delayFor(previousFailures) : null);
-  }
-
-  private Duration delayFor(int previousFailures) {
-    Duration delay = initialDelay;
-    for (int i = 0; i < previousFailures && delay.compareTo(maxDelay) < 0; i++) {
-      if (delay.compareTo(maxDelay.dividedBy(2)) > 0) return maxDelay;
-      delay = delay.multipliedBy(2);
+    if (findDataAccessFailure(failure)) {
+      return new Decision("DATABASE_TEMPORARY_ERROR", true);
     }
-    return delay.compareTo(maxDelay) > 0 ? maxDelay : delay;
+    return new Decision("LOTTERY_PROCESSING_ERROR", false);
   }
 
   private IncentiveBusinessException findBusinessFailure(Throwable failure) {
@@ -77,5 +42,5 @@ public class LotteryRetryPolicy {
     return false;
   }
 
-  public record Decision(String failureCode, boolean retryable, Duration delay) {}
+  public record Decision(String failureCode, boolean transientFailure) {}
 }

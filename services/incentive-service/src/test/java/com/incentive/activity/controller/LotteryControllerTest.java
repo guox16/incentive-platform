@@ -4,14 +4,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.incentive.activity.application.LotteryService;
+import com.incentive.activity.application.LotteryRecordQueryService;
 import com.incentive.activity.config.IncentiveSecurityConfiguration;
 import com.incentive.activity.domain.PrizeType;
 import com.incentive.activity.dto.LotteryDrawResponse;
+import com.incentive.activity.dto.LotteryRecordResponse;
+import com.incentive.activity.dto.LotteryRecordStatus;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,6 +33,7 @@ class LotteryControllerTest {
   private static final Instant DRAWN_AT = Instant.parse("2026-08-20T00:30:00Z");
   @Autowired private MockMvc mockMvc;
   @MockBean private LotteryService service;
+  @MockBean private LotteryRecordQueryService recordQueryService;
   @MockBean private StringRedisTemplate redis;
 
   @Test
@@ -67,5 +73,24 @@ class LotteryControllerTest {
             .contentType(MediaType.APPLICATION_JSON)
             .content("{}"))
         .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void returnsCurrentUsersLotteryRecords() throws Exception {
+    when(recordQueryService.findRecentByUser(7L)).thenReturn(List.of(
+        new LotteryRecordResponse(
+            7001L, "SUMMER_LOTTERY", "夏日抽奖", LotteryRecordStatus.PROCESSING,
+            null, null, null, 10L, DRAWN_AT, DRAWN_AT)));
+
+    mockMvc.perform(get("/api/v1/activities/lotteries/orders/me")
+            .with(jwt().jwt(token -> token.subject("7"))
+                .authorities(new SimpleGrantedAuthority("LOTTERY_PARTICIPATE"))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].orderId").value(7001))
+        .andExpect(jsonPath("$[0].activityName").value("夏日抽奖"))
+        .andExpect(jsonPath("$[0].status").value("PROCESSING"))
+        .andExpect(jsonPath("$[0].prizeId").doesNotExist());
+
+    verify(recordQueryService).findRecentByUser(7L);
   }
 }

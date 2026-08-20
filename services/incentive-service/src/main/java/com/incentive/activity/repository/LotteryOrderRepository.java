@@ -20,6 +20,8 @@ public interface LotteryOrderRepository extends JpaRepository<LotteryOrder, Long
   Optional<LotteryOrder> findByUserIdAndActivityIdAndRequestId(
       Long userId, Long activityId, String requestId);
 
+  List<LotteryOrder> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+
   @Query("select lotteryOrder.id from LotteryOrder lotteryOrder "
       + "where lotteryOrder.status <> com.incentive.activity.domain.LotteryOrderStatus.SUCCESS "
       + "and lotteryOrder.status <> com.incentive.activity.domain.LotteryOrderStatus.FAILED "

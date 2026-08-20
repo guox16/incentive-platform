@@ -200,6 +200,21 @@ export type LotteryDrawResponse = {
   drawnAt: string;
 };
 
+export type LotteryRecordStatus = 'PROCESSING' | 'SUCCESS' | 'FAILED';
+
+export type LotteryRecordResponse = {
+  orderId: number;
+  activityCode: string;
+  activityName: string;
+  status: LotteryRecordStatus;
+  prizeId: number | null;
+  prizeName: string | null;
+  prizeType: PrizeType | null;
+  pointsCost: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RedemptionResponse = {
   redemptionId: number;
   activityCode: string;

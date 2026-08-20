@@ -12,7 +12,6 @@ import com.incentive.points.repository.PointAccountRepository;
 import com.incentive.points.repository.PointReservationRepository;
 import com.incentive.points.repository.PointTransactionRepository;
 import com.incentive.points.support.PointBusinessException;
-import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +52,7 @@ class PointReservationFlowTest {
     assertThat(reserved.balanceBefore()).isEqualTo(100);
     assertThat(reserved.balanceAfter()).isEqualTo(60);
     assertThat(reserveReplay.replayed()).isTrue();
+    assertThat(reserveReplay.expiresAt()).isEqualTo(reserved.expiresAt());
     assertThat(accountRepository.findById(USER_ID).orElseThrow().getBalance()).isEqualTo(60);
 
     var confirmed = service.confirm(request.businessId());
@@ -97,8 +97,7 @@ class PointReservationFlowTest {
     PointReservationRequest request = request(1005L, 40);
     service.reserve(request);
     PointReservationRequest changed = new PointReservationRequest(
-        request.businessId(), request.userId(), 41, request.source(), request.remark(),
-        request.expiresAt());
+        request.businessId(), request.userId(), 41, request.source(), request.remark());
 
     assertThatThrownBy(() -> service.reserve(changed))
         .isInstanceOf(PointBusinessException.class)
@@ -119,8 +118,6 @@ class PointReservationFlowTest {
   }
 
   private PointReservationRequest request(Long businessId, long amount) {
-    return new PointReservationRequest(
-        businessId, USER_ID, amount, "lottery", "抽奖预占",
-        Instant.now().plusSeconds(60));
+    return new PointReservationRequest(businessId, USER_ID, amount, "lottery", "抽奖预占");
   }
 }

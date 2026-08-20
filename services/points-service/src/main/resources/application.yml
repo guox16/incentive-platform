@@ -41,6 +41,7 @@ xxl:
       log-retention-days: ${XXL_JOB_LOG_RETENTION_DAYS:30}
 points:
   reservation:
+    ttl: ${POINT_RESERVATION_TTL:PT5M}
     compensation:
       batch-size: ${POINT_RESERVATION_COMPENSATION_BATCH_SIZE:100}
       max-per-run: ${POINT_RESERVATION_COMPENSATION_MAX_PER_RUN:1000}

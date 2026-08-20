@@ -51,7 +51,7 @@ class PointControllerTest {
     mockMvc.perform(post("/api/v1/internal/points/reservations")
             .with(jwt().authorities(new SimpleGrantedAuthority("POINTS_COMMAND")))
             .contentType(MediaType.APPLICATION_JSON)
-            .content("{\"businessId\":1,\"userId\":1,\"amount\":10,\"source\":\"TEST\"}"))
+            .content("{\"businessId\":1,\"userId\":1,\"amount\":0,\"source\":\"TEST\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
   }

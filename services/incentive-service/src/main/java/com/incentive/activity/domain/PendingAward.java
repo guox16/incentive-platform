@@ -7,11 +7,19 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 @Entity
-@Table(name = "pending_awards")
+@Table(name = "pending_awards",
+    uniqueConstraints = @UniqueConstraint(name = "uk_pending_awards_source",
+        columnNames = {"source_type", "source_record_id"}),
+    indexes = {
+        @Index(name = "idx_pending_awards_status_created", columnList = "status,created_at"),
+        @Index(name = "idx_pending_awards_user_created", columnList = "user_id,created_at")
+    })
 public class PendingAward {
   public enum SourceType { LOTTERY, REDEMPTION }
   public enum Status { PENDING, PROCESSING, AWARDED, FAILED }
@@ -82,4 +90,16 @@ public class PendingAward {
     award.updatedAt = now;
     return award;
   }
+
+  public Long getId() { return id; }
+  public SourceType getSourceType() { return sourceType; }
+  public Long getSourceRecordId() { return sourceRecordId; }
+  public Long getUserId() { return userId; }
+  public Long getPrizeId() { return prizeId; }
+  public String getPrizeName() { return prizeName; }
+  public PrizeType getPrizeType() { return prizeType; }
+  public String getAwardPayload() { return awardPayload; }
+  public Status getStatus() { return status; }
+  public int getRetryCount() { return retryCount; }
+  public Instant getCreatedAt() { return createdAt; }
 }

@@ -180,6 +180,10 @@ export type UpdateActivityRequest = Omit<CreateActivityRequest, 'code' | 'type'>
   status: ActivityStatus;
 };
 
+export type LotteryDrawRequest = {
+  requestId: string;
+};
+
 export type LotteryDrawResponse = {
   participationId: number;
   activityCode: string;
@@ -194,6 +198,21 @@ export type LotteryDrawResponse = {
   pointTransactionId: number;
   balanceAfter: number;
   drawnAt: string;
+};
+
+export type LotteryRecordStatus = 'PROCESSING' | 'SUCCESS' | 'FAILED';
+
+export type LotteryRecordResponse = {
+  orderId: number;
+  activityCode: string;
+  activityName: string;
+  status: LotteryRecordStatus;
+  prizeId: number | null;
+  prizeName: string | null;
+  prizeType: PrizeType | null;
+  pointsCost: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type RedemptionResponse = {

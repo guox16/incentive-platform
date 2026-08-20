@@ -259,7 +259,9 @@ CREATE TABLE IF NOT EXISTS lottery_participations (
 
 CREATE TABLE IF NOT EXISTS redemption_records (
     id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '兑换记录ID',
+    request_id            VARCHAR(64) NOT NULL COMMENT '客户端兑换请求幂等号',
     activity_id           BIGINT UNSIGNED NOT NULL COMMENT '活动ID',
+    activity_code_snapshot VARCHAR(64) NOT NULL COMMENT '活动编码快照',
     rule_id               BIGINT UNSIGNED NOT NULL COMMENT '规则ID',
     rule_version          INT UNSIGNED NOT NULL COMMENT '规则版本快照',
     item_id               BIGINT UNSIGNED NOT NULL COMMENT '兑换商品ID',
@@ -272,15 +274,22 @@ CREATE TABLE IF NOT EXISTS redemption_records (
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
     points_cost           BIGINT UNSIGNED NOT NULL COMMENT '本次扣除积分',
     eligibility_result    JSON NULL COMMENT '资格校验结果快照',
-    point_transaction_id  BIGINT UNSIGNED NOT NULL COMMENT '积分服务扣减流水ID',
+    point_business_id     BIGINT UNSIGNED NOT NULL COMMENT '积分扣减稳定业务幂等号',
+    point_transaction_id  BIGINT UNSIGNED NULL COMMENT '积分服务扣减流水ID',
+    balance_after         BIGINT UNSIGNED NULL COMMENT '扣减后的积分余额',
+    status                VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING待扣减、COMPLETED兑换完成',
     created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '兑换时间',
+    updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
     PRIMARY KEY (id),
+    UNIQUE KEY uk_redemption_records_request_id (request_id),
+    UNIQUE KEY uk_redemption_records_point_business_id (point_business_id),
     KEY idx_redemption_records_user_time (user_id, created_at),
     KEY idx_redemption_records_activity_user_time (activity_id, user_id, created_at),
     CONSTRAINT fk_redemption_records_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
     CONSTRAINT fk_redemption_records_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
     CONSTRAINT fk_redemption_records_item FOREIGN KEY (item_id) REFERENCES redemption_items (id),
-    CONSTRAINT chk_redemption_records_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS'))
+    CONSTRAINT chk_redemption_records_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS')),
+    CONSTRAINT chk_redemption_records_status CHECK (status IN ('PENDING', 'COMPLETED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='兑换记录与奖品快照';
 
 CREATE TABLE IF NOT EXISTS pending_awards (

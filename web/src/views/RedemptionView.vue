@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import axios from 'axios';
 import { computed, onMounted, ref } from 'vue';
+import { getCurrentUserId } from '../api/auth';
 import { http } from '../api/http';
 import type {
   ActivityDetailResponse,
@@ -43,6 +44,23 @@ function accent(item: RedemptionItemResponse) {
   return item.displayOrder % 2 === 0 ? 'navy' : 'blue';
 }
 
+function redemptionRequestStorageKey(activityCode: string, itemId: number) {
+  return `redemptionRequestId:${getCurrentUserId() ?? 'unknown'}:${activityCode}:${itemId}`;
+}
+
+function getOrCreateRedemptionRequestId(activityCode: string, itemId: number) {
+  const key = redemptionRequestStorageKey(activityCode, itemId);
+  const existing = localStorage.getItem(key);
+  if (existing) return existing;
+  const requestId = crypto.randomUUID();
+  localStorage.setItem(key, requestId);
+  return requestId;
+}
+
+function clearRedemptionRequestId(activityCode: string, itemId: number) {
+  localStorage.removeItem(redemptionRequestStorageKey(activityCode, itemId));
+}
+
 async function loadActivities() {
   loading.value = true;
   loadError.value = '';
@@ -74,12 +92,17 @@ function start(item: RedemptionItemResponse) {
 
 async function confirm() {
   if (!current.value || !activity.value || submitting.value) return;
+  const activityCode = activity.value.code;
+  const itemId = current.value.id;
   submitting.value = true;
   submitError.value = '';
   try {
     const response = await http.post<RedemptionResponse>(
-      `/activities/redemptions/${activity.value.code}/items/${current.value.id}`,
+      `/activities/redemptions/${activityCode}/items/${itemId}`,
+      null,
+      { headers: { 'Idempotency-Key': getOrCreateRedemptionRequestId(activityCode, itemId) } },
     );
+    clearRedemptionRequestId(activityCode, itemId);
     result.value = response.data;
     balance.value = response.data.balanceAfter;
     success.value = true;

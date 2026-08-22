@@ -34,7 +34,7 @@ public class AwardIssuanceService {
     try {
       String resultRef = switch (issuance.getAwardType()) {
         case POINTS -> issuePoints(issuance);
-        case VIRTUAL -> "VIRTUAL_AWARD:" + issuance.getId();
+        case VIRTUAL -> null;
         case NONE -> throw new AwardDeliveryException(
             "AWARD_TYPE_UNSUPPORTED", "谢谢参与不能创建发奖任务");
       };

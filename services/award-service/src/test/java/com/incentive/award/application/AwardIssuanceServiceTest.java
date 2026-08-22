@@ -82,6 +82,24 @@ class AwardIssuanceServiceTest {
     verify(stateService).fail(81L, "AWARD_PAYLOAD_INVALID", "积分奖品必须配置正整数points");
   }
 
+  @Test
+  void virtualAwardOnlyCreatesUserAwardRecord() {
+    AwardCommandMessage command = command(AwardType.VIRTUAL, "{}");
+    AwardIssuance processing = issuance(AwardIssuanceStatus.PROCESSING);
+    AwardIssuance succeeded = mock(AwardIssuance.class);
+    when(processing.getAwardType()).thenReturn(AwardType.VIRTUAL);
+    when(succeeded.getId()).thenReturn(81L);
+    when(succeeded.getResultRef()).thenReturn("USER_AWARD:301");
+    when(coordinator.prepare(command)).thenReturn(processing);
+    when(stateService.succeed(81L, null)).thenReturn(succeeded);
+
+    var result = service.issue(command);
+
+    assertThat(result.resultRef()).isEqualTo("USER_AWARD:301");
+    verify(stateService).succeed(81L, null);
+    verify(pointsClient, never()).credit(9001L, 7L, 100L, "100积分");
+  }
+
   private AwardIssuance issuance(AwardIssuanceStatus status) {
     AwardIssuance issuance = mock(AwardIssuance.class);
     when(issuance.getId()).thenReturn(81L);

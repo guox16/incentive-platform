@@ -59,6 +59,26 @@ CREATE TABLE IF NOT EXISTS award_issuances (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='幂等发奖执行记录';
 
+CREATE TABLE IF NOT EXISTS user_awards (
+    id                     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户奖品ID',
+    user_id                BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    award_id               BIGINT UNSIGNED NOT NULL COMMENT '奖品ID',
+    issuance_id            BIGINT UNSIGNED NOT NULL COMMENT '发奖记录ID',
+    source_type            ENUM('LOTTERY', 'REDEMPTION') NOT NULL COMMENT '获得来源',
+    source_record_id       BIGINT UNSIGNED NOT NULL COMMENT '来源记录ID',
+    award_name_snapshot    VARCHAR(100) NOT NULL COMMENT '奖品名称快照',
+    award_type_snapshot    ENUM('VIRTUAL', 'POINTS') NOT NULL COMMENT '奖品类型快照',
+    award_payload_snapshot JSON NULL COMMENT '奖品参数快照',
+    obtained_at            DATETIME(3) NOT NULL COMMENT '获得时间',
+    created_at             DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_awards_issuance (issuance_id),
+    KEY idx_user_awards_user_obtained (user_id, obtained_at),
+    KEY idx_user_awards_award (award_id),
+    CONSTRAINT fk_user_awards_award FOREIGN KEY (award_id) REFERENCES awards (id),
+    CONSTRAINT fk_user_awards_issuance FOREIGN KEY (issuance_id) REFERENCES award_issuances (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='我的奖品测试记录';
+
 CREATE TABLE IF NOT EXISTS award_inventory_ledger (
     id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '库存流水ID',
     award_id         BIGINT UNSIGNED NOT NULL COMMENT '奖品ID',

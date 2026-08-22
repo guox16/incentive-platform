@@ -1,12 +1,15 @@
 package com.incentive.activity.application;
 
 import com.incentive.activity.application.lottery.LotteryPreDrawContext;
+import com.incentive.activity.application.lottery.LotteryPostDrawStockRule;
 import com.incentive.activity.application.lottery.LotteryPreDrawRuleChain;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleDefinition;
 import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
 import com.incentive.activity.domain.LotteryOrder;
 import com.incentive.activity.domain.LotteryOrderStatus;
+import com.incentive.activity.domain.LotteryPreDrawRuleConfig;
 import com.incentive.activity.domain.LotteryPrize;
 import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.infrastructure.BusinessNumberGenerator;
@@ -20,6 +23,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -35,6 +39,7 @@ public class LotteryOrderCreationService {
   private final LotteryPreDrawRuleStore preDrawRuleStore;
   private final LotteryPrizePicker prizePicker;
   private final LotteryPreDrawRuleChain preDrawRuleChain;
+  private final LotteryPostDrawStockRule postDrawStockRule;
   private final BusinessNumberGenerator businessNumberGenerator;
   private final Clock clock;
 
@@ -44,6 +49,7 @@ public class LotteryOrderCreationService {
       LotteryParticipationRepository participationRepository,
       LotteryPreDrawRuleStore preDrawRuleStore,
       LotteryPrizePicker prizePicker, LotteryPreDrawRuleChain preDrawRuleChain,
+      LotteryPostDrawStockRule postDrawStockRule,
       BusinessNumberGenerator businessNumberGenerator, Clock clock) {
     this.activityRepository = activityRepository;
     this.activityQueryService = activityQueryService;
@@ -53,6 +59,7 @@ public class LotteryOrderCreationService {
     this.preDrawRuleStore = preDrawRuleStore;
     this.prizePicker = prizePicker;
     this.preDrawRuleChain = preDrawRuleChain;
+    this.postDrawStockRule = postDrawStockRule;
     this.businessNumberGenerator = businessNumberGenerator;
     this.clock = clock;
   }
@@ -102,14 +109,29 @@ public class LotteryOrderCreationService {
               "LOTTERY_POOL_STALE", "抽奖奖池与当前规则不一致", HttpStatus.CONFLICT));
     }
 
-    String decision = resolution.designated()
-        ? resolution.designatedBy() : "WEIGHTED_RANDOM";
-    String eligibilityResult = "{\"passed\":true,\"usedTodayBefore\":" + usedToday
-        + ",\"drawNumber\":" + drawNumber + ",\"preDrawDecision\":\"" + decision + "\"}";
-    LotteryOrder order = new LotteryOrder(
-        businessNumberGenerator.next(), normalizedRequestId, userId, activity, rule, selected,
-        businessNumberGenerator.next(), eligibilityResult, now);
-    return new CreationResult(orderRepository.saveAndFlush(order), false);
+    Long orderId = businessNumberGenerator.next();
+    var stockResolution = postDrawStockRule.resolve(
+        orderId, activity.getId(), selected, prizes, luckyPrizeId(configuredRules));
+    LotteryPrize finalPrize = stockResolution.prize();
+    try {
+      String decision = resolution.designated()
+          ? resolution.designatedBy() : "WEIGHTED_RANDOM";
+      String eligibilityResult = "{\"passed\":true,\"usedTodayBefore\":" + usedToday
+          + ",\"drawNumber\":" + drawNumber + ",\"preDrawDecision\":\"" + decision
+          + "\",\"stockFallback\":" + stockResolution.fallback() + "}";
+      LotteryOrder order = new LotteryOrder(
+          orderId, normalizedRequestId, userId, activity, rule, finalPrize,
+          businessNumberGenerator.next(), eligibilityResult, stockResolution.stockNo(), now);
+      return new CreationResult(orderRepository.saveAndFlush(order), false);
+    } catch (DataIntegrityViolationException failure) {
+      postDrawStockRule.discard(orderId, activity.getId(), finalPrize.getPrizeId(),
+          stockResolution.stockNo());
+      throw failure;
+    } catch (RuntimeException failure) {
+      postDrawStockRule.release(orderId, activity.getId(), finalPrize.getPrizeId(),
+          stockResolution.stockNo());
+      throw failure;
+    }
   }
 
   private String normalizeRequestId(String requestId) {
@@ -139,6 +161,14 @@ public class LotteryOrderCreationService {
     return orderRepository
         .countByActivityIdAndUserIdAndStatusNotAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
             activityId, userId, LotteryOrderStatus.FAILED, from, to);
+  }
+
+  private Long luckyPrizeId(List<LotteryPreDrawRuleDefinition> configuredRules) {
+    return configuredRules.stream()
+        .filter(rule -> LotteryPreDrawRuleConfig.LUCKY_FALLBACK.equals(rule.type()))
+        .map(rule -> ((LotteryPreDrawRuleDefinition.LuckyFallbackParameters)
+            rule.parameters()).prizeId())
+        .findFirst().orElse(null);
   }
 
   public record CreationResult(LotteryOrder order, boolean replayed) {}

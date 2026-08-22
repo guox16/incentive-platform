@@ -43,6 +43,8 @@ public class PendingAward {
   private PrizeType prizeType;
   @Column(name = "award_payload_snapshot", columnDefinition = "json", updatable = false)
   private String awardPayload;
+  @Column(name = "stock_no", updatable = false)
+  private Long stockNo;
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
   private Status status;
@@ -68,6 +70,7 @@ public class PendingAward {
     award.prizeName = participation.getPrizeName();
     award.prizeType = participation.getPrizeType();
     award.awardPayload = participation.getAwardPayload();
+    award.stockNo = participation.getStockNo();
     award.status = Status.PENDING;
     award.retryCount = 0;
     award.createdAt = now;
@@ -99,6 +102,7 @@ public class PendingAward {
   public String getPrizeName() { return prizeName; }
   public PrizeType getPrizeType() { return prizeType; }
   public String getAwardPayload() { return awardPayload; }
+  public Long getStockNo() { return stockNo; }
   public Status getStatus() { return status; }
   public int getRetryCount() { return retryCount; }
   public Instant getCreatedAt() { return createdAt; }

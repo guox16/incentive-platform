@@ -174,7 +174,7 @@ SELECT
         WHEN 'DEBUG_POINTS_100' THEN 3
         ELSE 6
     END,
-    NULL,
+    CASE WHEN award.award_type = 'NONE' THEN NULL ELSE award.available_stock END,
     CASE award.code
         WHEN 'DEBUG_COUPON_20' THEN 1
         WHEN 'DEBUG_POINTS_100' THEN 2
@@ -260,7 +260,7 @@ SELECT activity.id, rule_config.id, award.id, award.name, award.award_type,
            WHEN 'BONUS_POINTS_100' THEN 3
            ELSE 6
        END,
-       NULL,
+       CASE WHEN award.award_type = 'NONE' THEN NULL ELSE award.available_stock END,
        CASE award.code
            WHEN 'WELCOME_COUPON' THEN 1
            WHEN 'BONUS_POINTS_100' THEN 2

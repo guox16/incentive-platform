@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS lottery_prizes (
     cover_url_snapshot    VARCHAR(500) NULL COMMENT '奖品封面快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
     weight                BIGINT UNSIGNED NOT NULL COMMENT '抽奖权重，发布时约分后写入Redis槽位池',
-    campaign_quota        BIGINT UNSIGNED NULL COMMENT '活动投放名额，为空表示不限；一期不扣减',
+    campaign_quota        BIGINT UNSIGNED NULL COMMENT '活动库存编号上限；NONE奖品为空',
     display_order         INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
     created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
@@ -145,7 +145,11 @@ CREATE TABLE IF NOT EXISTS lottery_prizes (
     CONSTRAINT fk_lottery_prizes_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
     CONSTRAINT fk_lottery_prizes_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
     CONSTRAINT chk_lottery_prizes_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS', 'NONE')),
-    CONSTRAINT chk_lottery_prizes_weight CHECK (weight > 0)
+    CONSTRAINT chk_lottery_prizes_weight CHECK (weight > 0),
+    CONSTRAINT chk_lottery_prizes_quota CHECK (
+        (prize_type_snapshot = 'NONE' AND campaign_quota IS NULL)
+        OR (prize_type_snapshot <> 'NONE' AND campaign_quota IS NOT NULL)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖活动奖品与概率配置';
 
 CREATE TABLE IF NOT EXISTS redemption_items (
@@ -190,6 +194,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
     prize_type_snapshot    VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
     cover_url_snapshot     VARCHAR(500) NULL COMMENT '奖品封面快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '活动奖品库存编号；NONE奖品为空',
     points_cost            BIGINT UNSIGNED NOT NULL COMMENT '本次抽奖积分成本',
     points_business_id     BIGINT UNSIGNED NOT NULL COMMENT 'Snowflake积分业务号',
     points_reservation_expires_at DATETIME(3) NULL COMMENT '积分预占过期时间',
@@ -205,6 +210,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
     PRIMARY KEY (id),
     UNIQUE KEY uk_lottery_orders_request (user_id, activity_id, request_id),
     UNIQUE KEY uk_lottery_orders_points_business (points_business_id),
+    UNIQUE KEY uk_lottery_orders_prize_stock (activity_id, prize_id, stock_no),
     KEY idx_lottery_orders_user_created (user_id, created_at),
     KEY idx_lottery_orders_status_updated (status, updated_at),
     KEY idx_lottery_orders_retry (status, next_retry_at, updated_at, id),
@@ -229,6 +235,7 @@ CREATE TABLE IF NOT EXISTS lottery_records (
     prize_type_snapshot   VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
     cover_url_snapshot    VARCHAR(500) NULL COMMENT '奖品封面快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '活动奖品库存编号；NONE奖品为空',
     points_cost           BIGINT UNSIGNED NOT NULL COMMENT '本次扣除积分',
     eligibility_result    JSON NULL COMMENT '资格校验结果快照',
     point_transaction_id  BIGINT UNSIGNED NULL COMMENT '积分确认后返回的扣减流水ID',
@@ -297,6 +304,7 @@ CREATE TABLE IF NOT EXISTS pending_awards (
     prize_name_snapshot   VARCHAR(100) NOT NULL COMMENT '奖品名称快照',
     prize_type_snapshot   VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '抽奖库存编号；兑换任务为空',
     status                VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING待发放、PROCESSING发放中、AWARDED已发放、FAILED失败',
     retry_count           INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '重试次数预留',
     last_error            VARCHAR(500) NULL COMMENT '最近错误',

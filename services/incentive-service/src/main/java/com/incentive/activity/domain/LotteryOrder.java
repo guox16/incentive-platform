@@ -18,7 +18,9 @@ import java.util.Objects;
         @UniqueConstraint(name = "uk_lottery_orders_request",
             columnNames = {"user_id", "activity_id", "request_id"}),
         @UniqueConstraint(name = "uk_lottery_orders_points_business",
-            columnNames = "points_business_id")
+            columnNames = "points_business_id"),
+        @UniqueConstraint(name = "uk_lottery_orders_prize_stock",
+            columnNames = {"activity_id", "prize_id", "stock_no"})
     },
     indexes = {
         @Index(name = "idx_lottery_orders_user_created", columnList = "user_id,created_at"),
@@ -55,6 +57,8 @@ public class LotteryOrder {
   private String coverUrl;
   @Column(name = "award_payload_snapshot", columnDefinition = "json", updatable = false)
   private String awardPayload;
+  @Column(name = "stock_no")
+  private Long stockNo;
   @Column(name = "points_cost", nullable = false, updatable = false)
   private long pointsCost;
   @Column(name = "points_business_id", nullable = false, updatable = false)
@@ -87,6 +91,13 @@ public class LotteryOrder {
   public LotteryOrder(Long id, String requestId, Long userId, IncentiveActivity activity,
       ParticipationRule rule, LotteryPrize prize, Long pointsBusinessId,
       String eligibilityResult, Instant now) {
+    this(id, requestId, userId, activity, rule, prize, pointsBusinessId,
+        eligibilityResult, null, now);
+  }
+
+  public LotteryOrder(Long id, String requestId, Long userId, IncentiveActivity activity,
+      ParticipationRule rule, LotteryPrize prize, Long pointsBusinessId,
+      String eligibilityResult, Long stockNo, Instant now) {
     this.id = Objects.requireNonNull(id, "抽奖单ID不能为空");
     this.requestId = requireText(requestId, "requestId不能为空");
     this.userId = Objects.requireNonNull(userId, "用户ID不能为空");
@@ -100,6 +111,13 @@ public class LotteryOrder {
     this.prizeType = Objects.requireNonNull(prize.getPrizeType(), "奖品类型不能为空");
     this.coverUrl = prize.getCoverUrl();
     this.awardPayload = prize.getAwardPayload();
+    if (stockNo != null && stockNo <= 0) {
+      throw new IllegalArgumentException("库存编号必须是正整数");
+    }
+    if (prize.getPrizeType() == PrizeType.NONE && stockNo != null) {
+      throw new IllegalArgumentException("NONE类型奖品不能占用库存编号");
+    }
+    this.stockNo = stockNo;
     this.pointsCost = rule.getPointsCost();
     this.pointsBusinessId = Objects.requireNonNull(pointsBusinessId, "积分业务号不能为空");
     this.eligibilityResult = eligibilityResult;
@@ -127,6 +145,7 @@ public class LotteryOrder {
   public PrizeType getPrizeType() { return prizeType; }
   public String getCoverUrl() { return coverUrl; }
   public String getAwardPayload() { return awardPayload; }
+  public Long getStockNo() { return stockNo; }
   public long getPointsCost() { return pointsCost; }
   public Long getPointsBusinessId() { return pointsBusinessId; }
   public String getEligibilityResult() { return eligibilityResult; }
@@ -210,6 +229,7 @@ public class LotteryOrder {
     retryCount = Math.addExact(retryCount, 1);
     nextRetryAt = null;
     status = LotteryOrderStatus.FAILED;
+    stockNo = null;
     updatedAt = now;
   }
 

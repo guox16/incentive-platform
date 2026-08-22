@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.application.lottery.LotteryPreDrawRuleChain;
 import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
+import com.incentive.activity.application.lottery.LotteryPostDrawStockRule;
 import com.incentive.activity.domain.LotteryPoolEntry;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
@@ -49,6 +50,7 @@ class LotteryOrderCreationServiceTest {
   @Mock private LotteryPreDrawRuleStore preDrawRuleStore;
   @Mock private LotteryPrizePicker prizePicker;
   @Mock private LotteryPreDrawRuleChain preDrawRuleChain;
+  @Mock private LotteryPostDrawStockRule postDrawStockRule;
   @Mock private BusinessNumberGenerator businessNumberGenerator;
   private LotteryOrderCreationService service;
 
@@ -56,7 +58,7 @@ class LotteryOrderCreationServiceTest {
   void setUp() {
     service = new LotteryOrderCreationService(activityRepository, activityQueryService,
         prizeRepository, orderRepository, participationRepository, preDrawRuleStore,
-        prizePicker, preDrawRuleChain, businessNumberGenerator,
+        prizePicker, preDrawRuleChain, postDrawStockRule, businessNumberGenerator,
         Clock.fixed(NOW, ZoneId.of("Asia/Shanghai")));
   }
 
@@ -77,6 +79,7 @@ class LotteryOrderCreationServiceTest {
     assertThat(result.order().getPointsBusinessId()).isEqualTo(9001L);
     assertThat(result.order().getRequestId()).isEqualTo("request-1");
     assertThat(result.order().getLotteryPrizeId()).isEqualTo(31L);
+    assertThat(result.order().getStockNo()).isEqualTo(1L);
     assertThat(result.order().getStatus()).isEqualTo(LotteryOrderStatus.INIT);
     assertThat(result.order().getFailureCode()).isNull();
     assertThat(result.order().getRetryCount()).isZero();
@@ -138,6 +141,8 @@ class LotteryOrderCreationServiceTest {
     when(preDrawRuleChain.resolve(any(), any(), any()))
         .thenReturn(new LotteryPreDrawRuleChain.Resolution(pool, null, null));
     when(prizePicker.pick(1L, 1, pool)).thenReturn(31L);
+    when(postDrawStockRule.resolve(7001L, 1L, prize, List.of(prize), null))
+        .thenReturn(new LotteryPostDrawStockRule.Resolution(prize, 1L, false));
   }
 
   private IncentiveActivity activity() {
@@ -171,6 +176,7 @@ class LotteryOrderCreationServiceTest {
     ReflectionTestUtils.setField(prize, "prizeName", "优惠券");
     ReflectionTestUtils.setField(prize, "prizeType", PrizeType.VIRTUAL);
     ReflectionTestUtils.setField(prize, "weight", 1L);
+    ReflectionTestUtils.setField(prize, "campaignQuota", 10L);
     return prize;
   }
 }

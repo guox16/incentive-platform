@@ -1,6 +1,7 @@
 package com.incentive.activity.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.domain.ActivityType;
@@ -15,6 +16,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @DataJpaTest
@@ -36,7 +38,21 @@ class LotteryOrderRepositoryTest {
     assertThat(ids).containsExactlyInAnyOrder(7001L, 7002L);
   }
 
+  @Test
+  void rejectsDuplicateStockNumberForSameActivityPrize() {
+    repository.saveAndFlush(order(7001L, "request-1", 9001L, 1L));
+
+    assertThatThrownBy(() -> repository.saveAndFlush(
+        order(7002L, "request-2", 9002L, 1L)))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
   private LotteryOrder order(Long id, String requestId, Long pointsBusinessId) {
+    return order(id, requestId, pointsBusinessId, null);
+  }
+
+  private LotteryOrder order(
+      Long id, String requestId, Long pointsBusinessId, Long stockNo) {
     IncentiveActivity activity = BeanUtils.instantiateClass(IncentiveActivity.class);
     ReflectionTestUtils.setField(activity, "id", 1L);
     ReflectionTestUtils.setField(activity, "code", "SUMMER_LOTTERY");
@@ -52,6 +68,6 @@ class LotteryOrderRepositoryTest {
     ReflectionTestUtils.setField(prize, "prizeName", "优惠券");
     ReflectionTestUtils.setField(prize, "prizeType", PrizeType.VIRTUAL);
     return new LotteryOrder(id, requestId, 7L, activity, rule, prize,
-        pointsBusinessId, "{\"passed\":true}", NOW);
+        pointsBusinessId, "{\"passed\":true}", stockNo, NOW);
   }
 }

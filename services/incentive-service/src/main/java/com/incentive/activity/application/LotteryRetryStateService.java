@@ -1,5 +1,6 @@
 package com.incentive.activity.application;
 
+import com.incentive.activity.application.lottery.LotteryPostDrawStockRule;
 import com.incentive.activity.domain.LotteryOrder;
 import com.incentive.activity.domain.LotteryOrderStatus;
 import com.incentive.activity.repository.LotteryOrderRepository;
@@ -15,17 +16,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class LotteryRetryStateService {
   private final LotteryOrderRepository orderRepository;
   private final LotteryRetryPolicy retryPolicy;
+  private final LotteryPostDrawStockRule postDrawStockRule;
   private final Clock clock;
   private final Duration reconciliationDelay;
 
   public LotteryRetryStateService(LotteryOrderRepository orderRepository,
-      LotteryRetryPolicy retryPolicy, Clock clock,
+      LotteryRetryPolicy retryPolicy, LotteryPostDrawStockRule postDrawStockRule, Clock clock,
       @Value("${lottery.retry.reconciliation-delay:PT5S}") Duration reconciliationDelay) {
     if (reconciliationDelay.isNegative() || reconciliationDelay.isZero()) {
       throw new IllegalArgumentException("抽奖对账延迟必须大于0");
     }
     this.orderRepository = orderRepository;
     this.retryPolicy = retryPolicy;
+    this.postDrawStockRule = postDrawStockRule;
     this.clock = clock;
     this.reconciliationDelay = reconciliationDelay;
   }
@@ -47,6 +50,7 @@ public class LotteryRetryStateService {
     LotteryOrder order = orderRepository.findByIdForUpdate(orderId).orElse(null);
     if (order == null || order.getStatus() == LotteryOrderStatus.SUCCESS) return false;
     if (order.getStatus() != LotteryOrderStatus.FAILED) {
+      releaseStock(order);
       order.markFailed(failureCode, clock.instant());
     }
     return true;
@@ -74,6 +78,7 @@ public class LotteryRetryStateService {
       return new FailureRecord(false, false, true, decision.failureCode(), retryAt);
     }
 
+    releaseStock(order);
     order.markFailed(decision.failureCode(), now);
     return new FailureRecord(false, true, false, decision.failureCode(), null);
   }
@@ -84,4 +89,9 @@ public class LotteryRetryStateService {
       boolean retryScheduled,
       String failureCode,
       Instant nextRetryAt) {}
+
+  private void releaseStock(LotteryOrder order) {
+    postDrawStockRule.release(order.getId(), order.getActivityId(), order.getPrizeId(),
+        order.getStockNo());
+  }
 }

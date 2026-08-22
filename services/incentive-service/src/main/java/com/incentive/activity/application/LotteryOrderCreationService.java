@@ -1,5 +1,8 @@
 package com.incentive.activity.application;
 
+import com.incentive.activity.application.lottery.LotteryPreDrawContext;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleChain;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
 import com.incentive.activity.domain.LotteryOrder;
@@ -10,6 +13,7 @@ import com.incentive.activity.infrastructure.BusinessNumberGenerator;
 import com.incentive.activity.infrastructure.LotteryPrizePicker;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryOrderRepository;
+import com.incentive.activity.repository.LotteryParticipationRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
@@ -27,19 +31,28 @@ public class LotteryOrderCreationService {
   private final ActivityQueryService activityQueryService;
   private final LotteryPrizeRepository prizeRepository;
   private final LotteryOrderRepository orderRepository;
+  private final LotteryParticipationRepository participationRepository;
+  private final LotteryPreDrawRuleStore preDrawRuleStore;
   private final LotteryPrizePicker prizePicker;
+  private final LotteryPreDrawRuleChain preDrawRuleChain;
   private final BusinessNumberGenerator businessNumberGenerator;
   private final Clock clock;
 
   public LotteryOrderCreationService(IncentiveActivityRepository activityRepository,
       ActivityQueryService activityQueryService, LotteryPrizeRepository prizeRepository,
-      LotteryOrderRepository orderRepository, LotteryPrizePicker prizePicker,
+      LotteryOrderRepository orderRepository,
+      LotteryParticipationRepository participationRepository,
+      LotteryPreDrawRuleStore preDrawRuleStore,
+      LotteryPrizePicker prizePicker, LotteryPreDrawRuleChain preDrawRuleChain,
       BusinessNumberGenerator businessNumberGenerator, Clock clock) {
     this.activityRepository = activityRepository;
     this.activityQueryService = activityQueryService;
     this.prizeRepository = prizeRepository;
     this.orderRepository = orderRepository;
+    this.participationRepository = participationRepository;
+    this.preDrawRuleStore = preDrawRuleStore;
     this.prizePicker = prizePicker;
+    this.preDrawRuleChain = preDrawRuleChain;
     this.businessNumberGenerator = businessNumberGenerator;
     this.clock = clock;
   }
@@ -72,12 +85,27 @@ public class LotteryOrderCreationService {
 
     List<LotteryPrize> prizes = prizeRepository
         .findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(activity.getId(), rule.getId());
-    Long selectedId = prizePicker.pick(activity.getId(), rule.getRuleVersion(), prizes);
-    LotteryPrize selected = prizes.stream().filter(prize -> prize.getId().equals(selectedId))
-        .findFirst().orElseThrow(() -> new IncentiveBusinessException(
-            "LOTTERY_POOL_STALE", "抽奖奖池与当前规则不一致", HttpStatus.CONFLICT));
+    long drawNumber = Math.addExact(
+        participationRepository.countByActivityIdAndUserId(activity.getId(), userId), 1L);
+    var configuredRules = preDrawRuleStore.load(rule.getId());
+    var resolution = preDrawRuleChain.resolve(configuredRules,
+        new LotteryPreDrawContext(activity.getId(), userId, rule.getPointsCost(), drawNumber),
+        prizes);
+    LotteryPrize selected;
+    if (resolution.designated()) {
+      selected = resolution.designatedPrize();
+    } else {
+      Long selectedId = prizePicker.pick(
+          activity.getId(), rule.getRuleVersion(), resolution.pool());
+      selected = prizes.stream().filter(prize -> prize.getId().equals(selectedId))
+          .findFirst().orElseThrow(() -> new IncentiveBusinessException(
+              "LOTTERY_POOL_STALE", "抽奖奖池与当前规则不一致", HttpStatus.CONFLICT));
+    }
 
-    String eligibilityResult = "{\"passed\":true,\"usedTodayBefore\":" + usedToday + "}";
+    String decision = resolution.designated()
+        ? resolution.designatedBy() : "WEIGHTED_RANDOM";
+    String eligibilityResult = "{\"passed\":true,\"usedTodayBefore\":" + usedToday
+        + ",\"drawNumber\":" + drawNumber + ",\"preDrawDecision\":\"" + decision + "\"}";
     LotteryOrder order = new LotteryOrder(
         businessNumberGenerator.next(), normalizedRequestId, userId, activity, rule, selected,
         businessNumberGenerator.next(), eligibilityResult, now);

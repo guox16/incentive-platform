@@ -1,20 +1,32 @@
 package com.incentive.activity.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleChain;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleDefinition;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
+import com.incentive.activity.application.lottery.PointsWeightPreDrawRule;
+import com.incentive.activity.application.lottery.PrizeUnlockPreDrawRule;
+import com.incentive.activity.application.lottery.UserListPreDrawRule;
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
+import com.incentive.activity.domain.LotteryPreDrawRuleConfig;
 import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.dto.AdminActivityResponse;
 import com.incentive.activity.dto.CreateActivityRequest;
+import com.incentive.activity.dto.LotteryPreDrawRuleRequest;
+import com.incentive.activity.dto.LotteryPreDrawRuleResponse;
 import com.incentive.activity.dto.UpdateActivityRequest;
 import com.incentive.activity.repository.IncentiveActivityRepository;
+import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -25,14 +37,21 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminActivityService {
   private final IncentiveActivityRepository activityRepository;
   private final ParticipationRuleRepository ruleRepository;
-  private final ObjectMapper objectMapper;
+  private final LotteryPreDrawRuleStore preDrawRuleStore;
+  private final LotteryPrizeRepository lotteryPrizeRepository;
+  private final LotteryPreDrawRuleChain preDrawRuleChain;
   private final Clock clock;
 
   public AdminActivityService(IncentiveActivityRepository activityRepository,
-      ParticipationRuleRepository ruleRepository, ObjectMapper objectMapper, Clock clock) {
+      ParticipationRuleRepository ruleRepository,
+      LotteryPreDrawRuleStore preDrawRuleStore,
+      LotteryPrizeRepository lotteryPrizeRepository,
+      LotteryPreDrawRuleChain preDrawRuleChain, Clock clock) {
     this.activityRepository = activityRepository;
     this.ruleRepository = ruleRepository;
-    this.objectMapper = objectMapper;
+    this.preDrawRuleStore = preDrawRuleStore;
+    this.lotteryPrizeRepository = lotteryPrizeRepository;
+    this.preDrawRuleChain = preDrawRuleChain;
     this.clock = clock;
   }
 
@@ -53,15 +72,17 @@ public class AdminActivityService {
   public AdminActivityResponse create(CreateActivityRequest request) {
     ensureManageable(request.type());
     validateTime(request.startsAt(), request.endsAt());
+    List<LotteryPreDrawRuleRequest> preDrawRules = rulesOrEmpty(request.preDrawRules());
+    validateRuleSettings(request.type(), request.luckyPrizeId(), preDrawRules);
     String code = request.code().trim();
     if (activityRepository.existsByCode(code)) {
       throw conflict("ACTIVITY_CODE_ALREADY_EXISTS", "活动编码已存在");
     }
-    String qualificationRule = normalizeJson(request.qualificationRule());
     IncentiveActivity activity = activityRepository.save(new IncentiveActivity(
         code, request.type(), request.name().trim(), request.startsAt(), request.endsAt()));
-    ruleRepository.save(new ParticipationRule(activity.getId(), 1, request.pointsCost(),
-        request.dailyLimit(), qualificationRule, clock.instant()));
+    ParticipationRule rule = ruleRepository.saveAndFlush(new ParticipationRule(
+        activity.getId(), 1, request.pointsCost(), request.dailyLimit(), clock.instant()));
+    savePreDrawRules(activity, rule, request.luckyPrizeId(), preDrawRules);
     return response(activity);
   }
 
@@ -70,22 +91,151 @@ public class AdminActivityService {
     IncentiveActivity activity = find(id);
     ensureManageable(activity.getType());
     validateTime(request.startsAt(), request.endsAt());
-    String qualificationRule = normalizeJson(request.qualificationRule());
+    List<LotteryPreDrawRuleRequest> preDrawRules = rulesOrEmpty(request.preDrawRules());
+    validateRuleSettings(activity.getType(), request.luckyPrizeId(), preDrawRules);
     ParticipationRule currentRule = latestRule(activity.getId());
+    RuleSettings requestedSettings = new RuleSettings(request.luckyPrizeId(), preDrawRules);
     activity.update(request.name().trim(), request.status(), request.startsAt(), request.endsAt());
-    if (ruleChanged(currentRule, request, qualificationRule)) {
-      ruleRepository.save(new ParticipationRule(activity.getId(), currentRule.getRuleVersion() + 1,
-          request.pointsCost(), request.dailyLimit(), qualificationRule, clock.instant()));
+    if (ruleChanged(currentRule, request, requestedSettings)) {
+      ParticipationRule newRule = ruleRepository.saveAndFlush(new ParticipationRule(
+          activity.getId(), currentRule.getRuleVersion() + 1, request.pointsCost(),
+          request.dailyLimit(), clock.instant()));
+      copyLotteryPrizes(activity, currentRule, newRule);
+      savePreDrawRules(activity, newRule, request.luckyPrizeId(), preDrawRules);
     }
     return response(activity);
   }
 
+  private void copyLotteryPrizes(IncentiveActivity activity, ParticipationRule currentRule,
+      ParticipationRule newRule) {
+    if (activity.getType() != ActivityType.LOTTERY) return;
+    var copies = lotteryPrizeRepository
+        .findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(
+            activity.getId(), currentRule.getId()).stream()
+        .map(prize -> prize.copyToRule(newRule.getId()))
+        .toList();
+    if (!copies.isEmpty()) lotteryPrizeRepository.saveAll(copies);
+  }
+
+  private void savePreDrawRules(IncentiveActivity activity, ParticipationRule participationRule,
+      Long luckyPrizeId, List<LotteryPreDrawRuleRequest> rules) {
+    if (activity.getType() != ActivityType.LOTTERY) return;
+    List<LotteryPreDrawRuleDefinition> definitions = new ArrayList<>();
+    for (int index = 0; index < rules.size(); index++) {
+      definitions.add(toDefinition(rules.get(index), (index + 1) * 10));
+    }
+    if (luckyPrizeId != null) {
+      definitions.add(new LotteryPreDrawRuleDefinition(LotteryPreDrawRuleConfig.LUCKY_FALLBACK,
+          Integer.MAX_VALUE, true,
+          new LotteryPreDrawRuleDefinition.LuckyFallbackParameters(luckyPrizeId)));
+    }
+    if (!definitions.isEmpty()) {
+      preDrawRuleStore.save(activity.getId(), participationRule.getId(), definitions);
+    }
+  }
+
   private AdminActivityResponse response(IncentiveActivity activity) {
     ParticipationRule rule = latestRule(activity.getId());
+    RuleSettings settings = readRuleSettings(rule.getId());
+    List<LotteryPreDrawRuleResponse> responses = new ArrayList<>();
+    List<LotteryPreDrawRuleRequest> configuredRules = settings.rules();
+    for (int index = 0; index < configuredRules.size(); index++) {
+      LotteryPreDrawRuleRequest configured = configuredRules.get(index);
+      responses.add(new LotteryPreDrawRuleResponse(
+          configured.type(), (index + 1) * 10, configured.enabled(), configured.userIds(),
+          configured.prizeMinimumDrawCounts(), configured.pointsTiers().stream()
+              .map(tier -> new LotteryPreDrawRuleResponse.PointsTier(
+                  tier.minimumPoints(), tier.weightMultipliers()))
+              .toList()));
+    }
     return new AdminActivityResponse(activity.getId(), activity.getCode(), activity.getType(),
         activity.getName(), activity.getStatus(), activity.getStartsAt(), activity.getEndsAt(),
-        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(),
-        rule.getQualificationRule(), activity.getCreatedAt(), activity.getUpdatedAt());
+        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(), settings.luckyPrizeId(),
+        List.copyOf(responses), activity.getCreatedAt(), activity.getUpdatedAt());
+  }
+
+  private RuleSettings readRuleSettings(Long participationRuleId) {
+    if (participationRuleId == null) return new RuleSettings(null, List.of());
+    Long luckyPrizeId = null;
+    List<LotteryPreDrawRuleRequest> configuredRules = new ArrayList<>();
+    for (LotteryPreDrawRuleDefinition stored : preDrawRuleStore.load(participationRuleId)) {
+      if (LotteryPreDrawRuleConfig.LUCKY_FALLBACK.equals(stored.type())) {
+        luckyPrizeId = ((LotteryPreDrawRuleDefinition.LuckyFallbackParameters)
+            stored.parameters()).prizeId();
+      } else {
+        configuredRules.add(toRequest(stored));
+      }
+    }
+    return new RuleSettings(luckyPrizeId, List.copyOf(configuredRules));
+  }
+
+  private void validateRuleSettings(ActivityType type, Long luckyPrizeId,
+      List<LotteryPreDrawRuleRequest> rules) {
+    if (type != ActivityType.LOTTERY) {
+      if (luckyPrizeId != null || !rules.isEmpty()) {
+        throw new IncentiveBusinessException("LOTTERY_RULE_TYPE_MISMATCH",
+            "只有抽奖活动可以配置抽奖前置规则", HttpStatus.BAD_REQUEST);
+      }
+      return;
+    }
+    List<LotteryPreDrawRuleDefinition> definitions = new ArrayList<>();
+    for (int index = 0; index < rules.size(); index++) {
+      definitions.add(toDefinition(rules.get(index), (index + 1) * 10));
+    }
+    preDrawRuleChain.validateConfiguration(definitions, luckyPrizeId);
+  }
+
+  private LotteryPreDrawRuleDefinition toDefinition(
+      LotteryPreDrawRuleRequest request, int executionOrder) {
+    LotteryPreDrawRuleDefinition.Parameters parameters = switch (request.type()) {
+      case UserListPreDrawRule.TYPE -> new LotteryPreDrawRuleDefinition.UserListParameters(
+          new LinkedHashSet<>(request.userIds() == null ? List.of() : request.userIds()));
+      case PrizeUnlockPreDrawRule.TYPE ->
+          new LotteryPreDrawRuleDefinition.PrizeUnlockParameters(
+              request.prizeMinimumDrawCounts() == null
+                  ? Map.of() : request.prizeMinimumDrawCounts());
+      case PointsWeightPreDrawRule.TYPE ->
+          new LotteryPreDrawRuleDefinition.PointsWeightParameters(
+              (request.pointsTiers() == null ? List.<LotteryPreDrawRuleRequest.PointsTier>of()
+                  : request.pointsTiers()).stream()
+                  .map(tier -> new LotteryPreDrawRuleDefinition.PointsTier(
+                      tier.minimumPoints(), tier.weightMultipliers() == null
+                          ? Map.of() : tier.weightMultipliers()))
+                  .toList());
+      default -> throw conflict("LOTTERY_PRE_RULE_INVALID",
+          "不支持的前置规则类型: " + request.type());
+    };
+    return new LotteryPreDrawRuleDefinition(
+        request.type(), executionOrder, request.enabled(), parameters);
+  }
+
+  private LotteryPreDrawRuleRequest toRequest(LotteryPreDrawRuleDefinition definition) {
+    List<Long> userIds = List.of();
+    Map<Long, Long> unlocks = Map.of();
+    List<LotteryPreDrawRuleRequest.PointsTier> tiers = List.of();
+    if (definition.parameters() instanceof LotteryPreDrawRuleDefinition.UserListParameters users) {
+      userIds = users.userIds().stream().sorted().toList();
+    } else if (definition.parameters()
+        instanceof LotteryPreDrawRuleDefinition.PrizeUnlockParameters configuredUnlocks) {
+      unlocks = configuredUnlocks.minimumDrawCounts();
+    } else if (definition.parameters()
+        instanceof LotteryPreDrawRuleDefinition.PointsWeightParameters configuredPoints) {
+      tiers = configuredPoints.tiers().stream()
+          .map(tier -> new LotteryPreDrawRuleRequest.PointsTier(
+              tier.minimumPoints(), tier.weightMultipliers()))
+          .toList();
+    }
+    return new LotteryPreDrawRuleRequest(
+        definition.type(), definition.enabled(), userIds, unlocks, tiers);
+  }
+
+  private List<LotteryPreDrawRuleRequest> rulesOrEmpty(List<LotteryPreDrawRuleRequest> rules) {
+    if (rules == null) return List.of();
+    List<LotteryPreDrawRuleRequest> normalized = new ArrayList<>();
+    for (int index = 0; index < rules.size(); index++) {
+      normalized.add(toRequest(toDefinition(rules.get(index), (index + 1) * 10)));
+    }
+    return List.copyOf(normalized);
   }
 
   private IncentiveActivity find(Long id) {
@@ -112,24 +262,16 @@ public class AdminActivityService {
     }
   }
 
-  private String normalizeJson(String value) {
-    if (value == null || value.isBlank()) return null;
-    try {
-      return objectMapper.writeValueAsString(objectMapper.readTree(value));
-    } catch (JsonProcessingException ex) {
-      throw new IncentiveBusinessException("QUALIFICATION_RULE_INVALID",
-          "资格规则必须是合法 JSON", HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  private boolean ruleChanged(ParticipationRule rule, UpdateActivityRequest request,
-      String qualificationRule) {
-    return rule.getPointsCost() != request.pointsCost()
-        || !java.util.Objects.equals(rule.getDailyLimit(), request.dailyLimit())
-        || !java.util.Objects.equals(rule.getQualificationRule(), qualificationRule);
+  private boolean ruleChanged(ParticipationRule currentRule, UpdateActivityRequest request,
+      RuleSettings requestedSettings) {
+    return currentRule.getPointsCost() != request.pointsCost()
+        || !Objects.equals(currentRule.getDailyLimit(), request.dailyLimit())
+        || !readRuleSettings(currentRule.getId()).equals(requestedSettings);
   }
 
   private IncentiveBusinessException conflict(String code, String message) {
     return new IncentiveBusinessException(code, message, HttpStatus.CONFLICT);
   }
+
+  private record RuleSettings(Long luckyPrizeId, List<LotteryPreDrawRuleRequest> rules) {}
 }

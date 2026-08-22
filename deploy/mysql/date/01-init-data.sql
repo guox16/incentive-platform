@@ -12,10 +12,10 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 TRUNCATE TABLE incentive_db.pending_awards;
 TRUNCATE TABLE incentive_db.redemption_records;
-TRUNCATE TABLE incentive_db.lottery_participations;
+TRUNCATE TABLE incentive_db.lottery_records;
 TRUNCATE TABLE incentive_db.redemption_items;
 TRUNCATE TABLE incentive_db.lottery_prizes;
-TRUNCATE TABLE incentive_db.incentive_outbox;
+TRUNCATE TABLE incentive_db.lottery_pre_draw_rules;
 TRUNCATE TABLE incentive_db.daily_check_ins;
 TRUNCATE TABLE incentive_db.check_in_reward_tiers;
 TRUNCATE TABLE incentive_db.check_in_rules;
@@ -141,13 +141,12 @@ SET @debug_activity_id = (
 );
 
 INSERT INTO activity_participation_rules
-    (activity_id, rule_version, points_cost, daily_limit, qualification_rule, status, effective_from)
+    (activity_id, rule_version, points_cost, daily_limit, status, effective_from)
 VALUES
-    (@debug_activity_id, 1, 10, 100, JSON_OBJECT(), 'ACTIVE', '2025-01-01 00:00:00.000')
+    (@debug_activity_id, 1, 10, 100, 'ACTIVE', '2025-01-01 00:00:00.000')
 ON DUPLICATE KEY UPDATE
     points_cost = VALUES(points_cost),
     daily_limit = VALUES(daily_limit),
-    qualification_rule = VALUES(qualification_rule),
     status = VALUES(status),
     effective_from = VALUES(effective_from);
 
@@ -161,7 +160,7 @@ SET @debug_rule_id = (
 INSERT INTO lottery_prizes
     (activity_id, rule_id, prize_id, prize_name_snapshot, prize_type_snapshot,
      cover_url_snapshot, award_payload_snapshot, weight, campaign_quota,
-     display_order, eligibility_rule)
+     display_order)
 SELECT
     @debug_activity_id,
     @debug_rule_id,
@@ -180,8 +179,7 @@ SELECT
         WHEN 'DEBUG_COUPON_20' THEN 1
         WHEN 'DEBUG_POINTS_100' THEN 2
         ELSE 3
-    END,
-    JSON_OBJECT()
+    END
 FROM award_db.awards AS award
 WHERE award.code IN ('DEBUG_COUPON_20', 'DEBUG_POINTS_100', 'DEBUG_THANKS')
 ON DUPLICATE KEY UPDATE
@@ -192,8 +190,7 @@ ON DUPLICATE KEY UPDATE
     award_payload_snapshot = VALUES(award_payload_snapshot),
     weight = VALUES(weight),
     campaign_quota = VALUES(campaign_quota),
-    display_order = VALUES(display_order),
-    eligibility_rule = VALUES(eligibility_rule);
+    display_order = VALUES(display_order);
 
 -- 快速核对本脚本生成的数据。
 SELECT @debug_user_id AS debug_user_id,
@@ -241,21 +238,21 @@ VALUES
      '2025-01-01 00:00:00.000', '2035-01-01 00:00:00.000');
 
 INSERT IGNORE INTO activity_participation_rules
-    (activity_id, rule_version, points_cost, daily_limit, qualification_rule, status, effective_from)
-SELECT id, 1, 10, 3, JSON_OBJECT(), 'ACTIVE', '2025-01-01 00:00:00.000'
+    (activity_id, rule_version, points_cost, daily_limit, status, effective_from)
+SELECT id, 1, 10, 3, 'ACTIVE', '2025-01-01 00:00:00.000'
 FROM incentive_activities
 WHERE code = 'SUMMER_LOTTERY';
 
 INSERT IGNORE INTO activity_participation_rules
-    (activity_id, rule_version, points_cost, daily_limit, qualification_rule, status, effective_from)
-SELECT id, 1, 0, 5, JSON_OBJECT(), 'ACTIVE', '2025-01-01 00:00:00.000'
+    (activity_id, rule_version, points_cost, daily_limit, status, effective_from)
+SELECT id, 1, 0, 5, 'ACTIVE', '2025-01-01 00:00:00.000'
 FROM incentive_activities
 WHERE code = 'POINTS_MALL';
 
 INSERT IGNORE INTO lottery_prizes
     (activity_id, rule_id, prize_id, prize_name_snapshot, prize_type_snapshot,
      cover_url_snapshot, award_payload_snapshot, weight, campaign_quota,
-     display_order, eligibility_rule)
+     display_order)
 SELECT activity.id, rule_config.id, award.id, award.name, award.award_type,
        award.cover_url, award.award_payload,
        CASE award.code
@@ -268,8 +265,7 @@ SELECT activity.id, rule_config.id, award.id, award.name, award.award_type,
            WHEN 'WELCOME_COUPON' THEN 1
            WHEN 'BONUS_POINTS_100' THEN 2
            ELSE 3
-       END,
-       JSON_OBJECT()
+       END
 FROM incentive_activities AS activity
 JOIN activity_participation_rules AS rule_config
   ON rule_config.activity_id = activity.id

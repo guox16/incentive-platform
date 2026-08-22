@@ -1,6 +1,6 @@
 package com.incentive.activity.infrastructure;
 
-import com.incentive.activity.domain.LotteryPrize;
+import com.incentive.activity.domain.LotteryPoolEntry;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,23 +11,23 @@ public final class WeightedSlotPool {
 
   private WeightedSlotPool() {}
 
-  public static List<String> build(List<LotteryPrize> prizes) {
-    if (prizes.isEmpty()) {
+  public static List<String> build(List<LotteryPoolEntry> pool) {
+    if (pool.isEmpty()) {
       throw new IncentiveBusinessException(
           "LOTTERY_POOL_EMPTY", "抽奖奖池未配置", HttpStatus.CONFLICT);
     }
-    long divisor = prizes.stream().mapToLong(LotteryPrize::getWeight)
+    long divisor = pool.stream().mapToLong(LotteryPoolEntry::weight)
         .reduce(0, WeightedSlotPool::gcd);
-    long slots = prizes.stream().mapToLong(prize -> prize.getWeight() / divisor).sum();
+    long slots = pool.stream().mapToLong(entry -> entry.weight() / divisor).sum();
     if (slots > MAX_SLOTS) {
       throw new IncentiveBusinessException(
           "LOTTERY_POOL_TOO_LARGE", "抽奖权重约分后的槽位数超过限制", HttpStatus.CONFLICT);
     }
     List<String> result = new ArrayList<>((int) slots);
-    for (LotteryPrize prize : prizes) {
-      long count = prize.getWeight() / divisor;
+    for (LotteryPoolEntry entry : pool) {
+      long count = entry.weight() / divisor;
       for (long index = 0; index < count; index++) {
-        result.add(prize.getId().toString());
+        result.add(entry.lotteryPrizeId().toString());
       }
     }
     return result;

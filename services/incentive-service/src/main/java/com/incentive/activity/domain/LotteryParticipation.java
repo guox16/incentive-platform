@@ -14,10 +14,10 @@ import java.time.Instant;
 import java.util.Objects;
 
 @Entity
-@Table(name = "lottery_participations",
-    uniqueConstraints = @UniqueConstraint(name = "uk_lottery_participations_order",
+@Table(name = "lottery_records",
+    uniqueConstraints = @UniqueConstraint(name = "uk_lottery_records_order",
         columnNames = "lottery_order_id"),
-    indexes = @Index(name = "idx_lottery_participations_status_updated",
+    indexes = @Index(name = "idx_lottery_records_status_updated",
         columnList = "status,updated_at"))
 public class LotteryParticipation {
   @Id

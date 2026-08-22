@@ -115,7 +115,7 @@ INSERT IGNORE INTO xxl_job_group
     (id, app_name, title, address_type, address_list, update_time)
 VALUES
     (1001, 'incentive-points-service', '积分服务执行器', 0, NULL, NOW()),
-    (1002, 'incentive-lottery-service', '抽奖重试执行器', 0, NULL, NOW());
+    (1002, 'incentive-lottery-service', '激励活动执行器', 0, NULL, NOW());
 
 -- Official local-development default account: admin / 123456. Change it after first login.
 INSERT IGNORE INTO xxl_job_user (id, username, password, role, permission)
@@ -147,4 +147,17 @@ VALUES (
     1002, 1002, '抽奖单异常对账', NOW(), NOW(), 'system', '',
     'CRON', '0/10 * * * * ?', 'DO_NOTHING', 'SHARDING_BROADCAST',
     'lotteryOrderReconciliationJob', '', 'SERIAL_EXECUTION', 50,
+    0, 'BEAN', '', '初始化', NOW(), '', 1, 0, 0);
+
+-- 待发奖任务每5秒扫描一次；消息发送失败或处理实例宕机后可由后续扫描补偿。
+INSERT IGNORE INTO xxl_job_info (
+    id, job_group, job_desc, add_time, update_time, author, alarm_email,
+    schedule_type, schedule_conf, misfire_strategy, executor_route_strategy,
+    executor_handler, executor_param, executor_block_strategy, executor_timeout,
+    executor_fail_retry_count, glue_type, glue_source, glue_remark, glue_updatetime,
+    child_jobid, trigger_status, trigger_last_time, trigger_next_time)
+VALUES (
+    1003, 1002, '待发奖消息投递', NOW(), NOW(), 'system', '',
+    'CRON', '0/5 * * * * ?', 'DO_NOTHING', 'SHARDING_BROADCAST',
+    'pendingAwardDispatchJob', '', 'SERIAL_EXECUTION', 30,
     0, 'BEAN', '', '初始化', NOW(), '', 1, 0, 0);

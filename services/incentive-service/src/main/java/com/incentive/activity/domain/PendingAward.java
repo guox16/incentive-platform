@@ -52,6 +52,8 @@ public class PendingAward {
   private int retryCount;
   @Column(name = "last_error", length = 500)
   private String lastError;
+  @Column(name = "result_ref", length = 128)
+  private String resultRef;
   @Column(name = "awarded_at")
   private Instant awardedAt;
   @Column(name = "created_at", nullable = false, updatable = false)
@@ -105,5 +107,26 @@ public class PendingAward {
   public Long getStockNo() { return stockNo; }
   public Status getStatus() { return status; }
   public int getRetryCount() { return retryCount; }
+  public String getResultRef() { return resultRef; }
   public Instant getCreatedAt() { return createdAt; }
+
+  public void markAwarded(String resultRef, Instant now) {
+    if (status == Status.AWARDED) return;
+    if (resultRef == null || resultRef.isBlank()) {
+      throw new IllegalArgumentException("发奖成功结果引用不能为空");
+    }
+    this.status = Status.AWARDED;
+    this.resultRef = resultRef;
+    this.lastError = null;
+    this.awardedAt = now;
+    this.updatedAt = now;
+  }
+
+  public void markAwardFailed(String error, Instant now) {
+    if (status == Status.AWARDED) return;
+    this.status = Status.FAILED;
+    this.retryCount++;
+    this.lastError = error == null ? "发奖失败" : error.substring(0, Math.min(error.length(), 500));
+    this.updatedAt = now;
+  }
 }

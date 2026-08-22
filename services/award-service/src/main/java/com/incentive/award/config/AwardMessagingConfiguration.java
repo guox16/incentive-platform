@@ -1,13 +1,13 @@
-package com.incentive.activity.config;
+package com.incentive.award.config;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Qualifier;
 
 @Configuration(proxyBeanMethods = false)
 public class AwardMessagingConfiguration {
@@ -38,10 +38,9 @@ public class AwardMessagingConfiguration {
 
   @Bean
   Binding awardCommandBinding(
-      @Qualifier("awardCommandQueue") Queue awardCommandQueue,
-      @Qualifier("awardCommandExchange") DirectExchange awardCommandExchange) {
-    return BindingBuilder.bind(awardCommandQueue)
-        .to(awardCommandExchange).with(COMMAND_ROUTING_KEY);
+      @Qualifier("awardCommandQueue") Queue queue,
+      @Qualifier("awardCommandExchange") DirectExchange exchange) {
+    return BindingBuilder.bind(queue).to(exchange).with(COMMAND_ROUTING_KEY);
   }
 
   @Bean
@@ -56,10 +55,9 @@ public class AwardMessagingConfiguration {
 
   @Bean
   Binding awardDeadLetterBinding(
-      @Qualifier("awardDeadLetterQueue") Queue awardDeadLetterQueue,
-      @Qualifier("awardDeadLetterExchange") DirectExchange awardDeadLetterExchange) {
-    return BindingBuilder.bind(awardDeadLetterQueue)
-        .to(awardDeadLetterExchange).with(DEAD_LETTER_ROUTING_KEY);
+      @Qualifier("awardDeadLetterQueue") Queue queue,
+      @Qualifier("awardDeadLetterExchange") DirectExchange exchange) {
+    return BindingBuilder.bind(queue).to(exchange).with(DEAD_LETTER_ROUTING_KEY);
   }
 
   @Bean
@@ -77,10 +75,9 @@ public class AwardMessagingConfiguration {
 
   @Bean
   Binding awardResultBinding(
-      @Qualifier("awardResultQueue") Queue awardResultQueue,
-      @Qualifier("awardResultExchange") DirectExchange awardResultExchange) {
-    return BindingBuilder.bind(awardResultQueue)
-        .to(awardResultExchange).with(RESULT_ROUTING_KEY);
+      @Qualifier("awardResultQueue") Queue queue,
+      @Qualifier("awardResultExchange") DirectExchange exchange) {
+    return BindingBuilder.bind(queue).to(exchange).with(RESULT_ROUTING_KEY);
   }
 
   @Bean

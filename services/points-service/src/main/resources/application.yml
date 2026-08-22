@@ -55,3 +55,4 @@ security:
     issuer: "${INTERNAL_JWT_ISSUER:incentive-service}"
     audience: "${INTERNAL_JWT_AUDIENCE:points-service}"
     token-ttl: "${INTERNAL_JWT_TTL:PT1M}"
+    trusted-issuers: "${INTERNAL_JWT_TRUSTED_ISSUERS:${INTERNAL_JWT_ISSUER:incentive-service}}"

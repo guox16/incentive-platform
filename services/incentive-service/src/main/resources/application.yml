@@ -16,6 +16,16 @@ spring:
     username: ${RABBITMQ_USER:incentive}
     password: ${RABBITMQ_PASSWORD:123456}
     publisher-confirm-type: correlated
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 5s
   jpa:
     hibernate: { ddl-auto: update }
     open-in-view: false

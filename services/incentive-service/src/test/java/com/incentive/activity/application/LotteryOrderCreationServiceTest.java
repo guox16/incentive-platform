@@ -8,6 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.incentive.activity.domain.ActivityStatus;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleChain;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
+import com.incentive.activity.application.lottery.LotteryPostDrawStockRule;
+import com.incentive.activity.domain.LotteryPoolEntry;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
 import com.incentive.activity.domain.LotteryOrder;
@@ -20,6 +24,7 @@ import com.incentive.activity.infrastructure.LotteryPrizePicker;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryOrderRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
+import com.incentive.activity.repository.LotteryParticipationRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,14 +46,19 @@ class LotteryOrderCreationServiceTest {
   @Mock private ActivityQueryService activityQueryService;
   @Mock private LotteryPrizeRepository prizeRepository;
   @Mock private LotteryOrderRepository orderRepository;
+  @Mock private LotteryParticipationRepository participationRepository;
+  @Mock private LotteryPreDrawRuleStore preDrawRuleStore;
   @Mock private LotteryPrizePicker prizePicker;
+  @Mock private LotteryPreDrawRuleChain preDrawRuleChain;
+  @Mock private LotteryPostDrawStockRule postDrawStockRule;
   @Mock private BusinessNumberGenerator businessNumberGenerator;
   private LotteryOrderCreationService service;
 
   @BeforeEach
   void setUp() {
     service = new LotteryOrderCreationService(activityRepository, activityQueryService,
-        prizeRepository, orderRepository, prizePicker, businessNumberGenerator,
+        prizeRepository, orderRepository, participationRepository, preDrawRuleStore,
+        prizePicker, preDrawRuleChain, postDrawStockRule, businessNumberGenerator,
         Clock.fixed(NOW, ZoneId.of("Asia/Shanghai")));
   }
 
@@ -69,10 +79,12 @@ class LotteryOrderCreationServiceTest {
     assertThat(result.order().getPointsBusinessId()).isEqualTo(9001L);
     assertThat(result.order().getRequestId()).isEqualTo("request-1");
     assertThat(result.order().getLotteryPrizeId()).isEqualTo(31L);
+    assertThat(result.order().getStockNo()).isEqualTo(1L);
     assertThat(result.order().getStatus()).isEqualTo(LotteryOrderStatus.INIT);
     assertThat(result.order().getFailureCode()).isNull();
     assertThat(result.order().getRetryCount()).isZero();
     assertThat(result.order().getNextRetryAt()).isNull();
+    verify(preDrawRuleStore).load(2L);
     verify(businessNumberGenerator, org.mockito.Mockito.times(2)).next();
   }
 
@@ -125,7 +137,12 @@ class LotteryOrderCreationServiceTest {
             any(), any(), any(), any(), any())).thenReturn(0L);
     when(prizeRepository.findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(1L, 2L))
         .thenReturn(List.of(prize));
-    when(prizePicker.pick(1L, 1, List.of(prize))).thenReturn(31L);
+    var pool = List.of(LotteryPoolEntry.original(prize));
+    when(preDrawRuleChain.resolve(any(), any(), any()))
+        .thenReturn(new LotteryPreDrawRuleChain.Resolution(pool, null, null));
+    when(prizePicker.pick(1L, 1, pool)).thenReturn(31L);
+    when(postDrawStockRule.resolve(7001L, 1L, prize, List.of(prize), null))
+        .thenReturn(new LotteryPostDrawStockRule.Resolution(prize, 1L, false));
   }
 
   private IncentiveActivity activity() {
@@ -159,6 +176,7 @@ class LotteryOrderCreationServiceTest {
     ReflectionTestUtils.setField(prize, "prizeName", "优惠券");
     ReflectionTestUtils.setField(prize, "prizeType", PrizeType.VIRTUAL);
     ReflectionTestUtils.setField(prize, "weight", 1L);
+    ReflectionTestUtils.setField(prize, "campaignQuota", 10L);
     return prize;
   }
 }

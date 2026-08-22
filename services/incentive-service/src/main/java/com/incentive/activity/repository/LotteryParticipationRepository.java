@@ -20,4 +20,6 @@ public interface LotteryParticipationRepository extends JpaRepository<LotteryPar
 
   long countByActivityIdAndUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
       Long activityId, Long userId, Instant from, Instant to);
+
+  long countByActivityIdAndUserId(Long activityId, Long userId);
 }

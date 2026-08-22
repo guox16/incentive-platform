@@ -155,12 +155,27 @@ export type PermissionCode =
   | 'INVENTORY_MANAGE'
   | 'ROLE_MANAGE';
 
+export type LotteryPreDrawRuleType = 'USER_LIST' | 'PRIZE_UNLOCK' | 'POINTS_WEIGHT';
+
+export type LotteryPreDrawRule = {
+  type: LotteryPreDrawRuleType;
+  executionOrder?: number;
+  enabled: boolean;
+  userIds: number[];
+  prizeMinimumDrawCounts: Record<number, number>;
+  pointsTiers: Array<{
+    minimumPoints: number;
+    weightMultipliers: Record<number, number>;
+  }>;
+};
+
 export type AdminActivityResponse = ActivitySummaryResponse & {
   status: ActivityStatus;
   ruleVersion: number;
   pointsCost: number;
   dailyLimit: number | null;
-  qualificationRule: string | null;
+  luckyPrizeId: number | null;
+  preDrawRules: LotteryPreDrawRule[];
   createdAt: string;
   updatedAt: string;
 };
@@ -173,7 +188,8 @@ export type CreateActivityRequest = {
   endsAt: string | null;
   pointsCost: number;
   dailyLimit: number | null;
-  qualificationRule: string | null;
+  luckyPrizeId: number | null;
+  preDrawRules: LotteryPreDrawRule[];
 };
 
 export type UpdateActivityRequest = Omit<CreateActivityRequest, 'code' | 'type'> & {

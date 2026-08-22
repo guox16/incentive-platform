@@ -33,9 +33,6 @@ public class ParticipationRule {
   @Column(name = "daily_limit", updatable = false)
   private Integer dailyLimit;
 
-  @Column(name = "qualification_rule", columnDefinition = "json", updatable = false)
-  private String qualificationRule;
-
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 16)
   private Status status;
@@ -52,12 +49,11 @@ public class ParticipationRule {
   protected ParticipationRule() {}
 
   public ParticipationRule(Long activityId, int ruleVersion, long pointsCost,
-      Integer dailyLimit, String qualificationRule, Instant effectiveFrom) {
+      Integer dailyLimit, Instant effectiveFrom) {
     this.activityId = activityId;
     this.ruleVersion = ruleVersion;
     this.pointsCost = pointsCost;
     this.dailyLimit = dailyLimit;
-    this.qualificationRule = qualificationRule;
     this.status = Status.ACTIVE;
     this.effectiveFrom = effectiveFrom;
   }
@@ -78,7 +74,6 @@ public class ParticipationRule {
   public int getRuleVersion() { return ruleVersion; }
   public long getPointsCost() { return pointsCost; }
   public Integer getDailyLimit() { return dailyLimit; }
-  public String getQualificationRule() { return qualificationRule; }
   public Status getStatus() { return status; }
   public Instant getEffectiveFrom() { return effectiveFrom; }
 }

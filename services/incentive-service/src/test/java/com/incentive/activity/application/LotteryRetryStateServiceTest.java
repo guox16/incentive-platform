@@ -1,6 +1,8 @@
 package com.incentive.activity.application;
 
+import com.incentive.activity.application.lottery.LotteryPostDrawStockRule;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.incentive.activity.domain.ActivityStatus;
@@ -31,13 +33,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 class LotteryRetryStateServiceTest {
   private static final Instant NOW = Instant.parse("2026-08-20T00:30:00Z");
   @Mock private LotteryOrderRepository orderRepository;
+  @Mock private LotteryPostDrawStockRule postDrawStockRule;
   private LotteryRetryStateService service;
 
   @BeforeEach
   void setUp() {
     LotteryRetryPolicy policy = new LotteryRetryPolicy();
     service = new LotteryRetryStateService(
-        orderRepository, policy, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(5));
+        orderRepository, policy, postDrawStockRule,
+        Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(5));
   }
 
   @Test
@@ -57,6 +61,7 @@ class LotteryRetryStateServiceTest {
   @Test
   void marksPermanentFailureTerminal() {
     LotteryOrder order = order();
+    ReflectionTestUtils.setField(order, "stockNo", 9L);
     when(orderRepository.findByIdForUpdate(7001L)).thenReturn(Optional.of(order));
 
     var record = service.recordFailure(7001L, failure("INSUFFICIENT_POINTS"));
@@ -64,7 +69,9 @@ class LotteryRetryStateServiceTest {
     assertThat(record.terminal()).isTrue();
     assertThat(order.getStatus()).isEqualTo(LotteryOrderStatus.FAILED);
     assertThat(order.getFailureCode()).isEqualTo("INSUFFICIENT_POINTS");
+    assertThat(order.getStockNo()).isNull();
     assertThat(order.getNextRetryAt()).isNull();
+    verify(postDrawStockRule).release(7001L, 1L, 131L, 9L);
   }
 
   @Test

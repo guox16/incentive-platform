@@ -3,6 +3,7 @@ package com.incentive.activity.dto;
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.domain.ActivityType;
 import java.time.Instant;
+import java.util.List;
 
 public record AdminActivityResponse(
     Long id,
@@ -15,6 +16,7 @@ public record AdminActivityResponse(
     int ruleVersion,
     long pointsCost,
     Integer dailyLimit,
-    String qualificationRule,
+    Long luckyPrizeId,
+    List<LotteryPreDrawRuleResponse> preDrawRules,
     Instant createdAt,
     Instant updatedAt) {}

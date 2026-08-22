@@ -3,6 +3,7 @@ package com.incentive.activity.infrastructure;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.incentive.activity.domain.LotteryPrize;
+import com.incentive.activity.domain.LotteryPoolEntry;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.BeanUtils;
@@ -15,7 +16,9 @@ class WeightedSlotPoolTest {
     LotteryPrize second = prize(12L, 30L);
     LotteryPrize third = prize(13L, 50L);
 
-    List<String> slots = WeightedSlotPool.build(List.of(first, second, third));
+    List<String> slots = WeightedSlotPool.build(List.of(
+        LotteryPoolEntry.original(first), LotteryPoolEntry.original(second),
+        LotteryPoolEntry.original(third)));
 
     assertThat(slots).hasSize(10);
     assertThat(slots).filteredOn("11"::equals).hasSize(2);

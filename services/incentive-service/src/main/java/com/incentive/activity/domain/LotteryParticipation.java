@@ -14,10 +14,10 @@ import java.time.Instant;
 import java.util.Objects;
 
 @Entity
-@Table(name = "lottery_participations",
-    uniqueConstraints = @UniqueConstraint(name = "uk_lottery_participations_order",
+@Table(name = "lottery_records",
+    uniqueConstraints = @UniqueConstraint(name = "uk_lottery_records_order",
         columnNames = "lottery_order_id"),
-    indexes = @Index(name = "idx_lottery_participations_status_updated",
+    indexes = @Index(name = "idx_lottery_records_status_updated",
         columnList = "status,updated_at"))
 public class LotteryParticipation {
   @Id
@@ -48,6 +48,8 @@ public class LotteryParticipation {
   private String coverUrl;
   @Column(name = "award_payload_snapshot", columnDefinition = "json", updatable = false)
   private String awardPayload;
+  @Column(name = "stock_no", updatable = false)
+  private Long stockNo;
   @Column(name = "points_cost", nullable = false, updatable = false)
   private long pointsCost;
   @Column(name = "eligibility_result", columnDefinition = "json", updatable = false)
@@ -78,6 +80,7 @@ public class LotteryParticipation {
     this.prizeType = order.getPrizeType();
     this.coverUrl = order.getCoverUrl();
     this.awardPayload = order.getAwardPayload();
+    this.stockNo = order.getStockNo();
     this.pointsCost = order.getPointsCost();
     this.eligibilityResult = order.getEligibilityResult();
     this.status = LotteryParticipationStatus.WAITING_CONFIRMATION;
@@ -111,6 +114,7 @@ public class LotteryParticipation {
   public PrizeType getPrizeType() { return prizeType; }
   public String getCoverUrl() { return coverUrl; }
   public String getAwardPayload() { return awardPayload; }
+  public Long getStockNo() { return stockNo; }
   public long getPointsCost() { return pointsCost; }
   public Long getPointTransactionId() { return pointTransactionId; }
   public LotteryParticipationStatus getStatus() { return status; }

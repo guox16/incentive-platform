@@ -49,6 +49,21 @@ public class LotteryPrize {
 
   protected LotteryPrize() {}
 
+  public LotteryPrize copyToRule(Long newRuleId) {
+    LotteryPrize copy = new LotteryPrize();
+    copy.activityId = activityId;
+    copy.ruleId = newRuleId;
+    copy.prizeId = prizeId;
+    copy.prizeName = prizeName;
+    copy.prizeType = prizeType;
+    copy.coverUrl = coverUrl;
+    copy.awardPayload = awardPayload;
+    copy.weight = weight;
+    copy.campaignQuota = campaignQuota;
+    copy.displayOrder = displayOrder;
+    return copy;
+  }
+
   public Long getId() { return id; }
   public Long getActivityId() { return activityId; }
   public Long getRuleId() { return ruleId; }

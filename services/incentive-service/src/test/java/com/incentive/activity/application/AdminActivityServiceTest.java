@@ -6,20 +6,25 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleChain;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleDefinition;
+import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
 import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.dto.CreateActivityRequest;
+import com.incentive.activity.dto.LotteryPreDrawRuleRequest;
 import com.incentive.activity.dto.UpdateActivityRequest;
 import com.incentive.activity.repository.IncentiveActivityRepository;
+import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,11 +38,15 @@ class AdminActivityServiceTest {
   private static final Instant NOW = Instant.parse("2026-08-12T08:00:00Z");
   @Mock IncentiveActivityRepository activityRepository;
   @Mock ParticipationRuleRepository ruleRepository;
+  @Mock LotteryPreDrawRuleStore preDrawRuleStore;
+  @Mock LotteryPrizeRepository lotteryPrizeRepository;
+  @Mock LotteryPreDrawRuleChain preDrawRuleChain;
   AdminActivityService service;
 
   @BeforeEach
   void setUp() {
-    service = new AdminActivityService(activityRepository, ruleRepository, new ObjectMapper(),
+    service = new AdminActivityService(activityRepository, ruleRepository, preDrawRuleStore,
+        lotteryPrizeRepository, preDrawRuleChain,
         Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
@@ -49,38 +58,79 @@ class AdminActivityServiceTest {
       setId(activity, 9L);
       return activity;
     });
-    when(ruleRepository.save(any(ParticipationRule.class))).thenAnswer(call -> call.getArgument(0));
+    when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
+      ParticipationRule rule = call.getArgument(0);
+      setId(rule, 19L);
+      return rule;
+    });
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(9L))
-        .thenReturn(Optional.of(new ParticipationRule(9L, 1, 20, 3, null, NOW)));
+        .thenReturn(Optional.of(rule(19L, 9L, 1, 20, 3, NOW)));
 
     var response = service.create(new CreateActivityRequest("SUMMER_DRAW", "夏日抽奖",
-        ActivityType.LOTTERY, NOW, NOW.plusSeconds(3600), 20, 3, null));
+        ActivityType.LOTTERY, NOW, NOW.plusSeconds(3600), 20, 3, null, List.of()));
 
     assertThat(response.status()).isEqualTo(ActivityStatus.DRAFT);
     assertThat(response.ruleVersion()).isEqualTo(1);
+    verify(preDrawRuleChain).validateConfiguration(List.of(), null);
   }
 
   @Test
   void createsNewRuleVersionWhenRuleChanges() {
     IncentiveActivity activity = activity(7L);
-    ParticipationRule oldRule = new ParticipationRule(7L, 2, 10, 1, null, NOW.minusSeconds(60));
+    ParticipationRule oldRule = rule(17L, 7L, 2, 10, 1, NOW.minusSeconds(60));
     when(activityRepository.findById(7L)).thenReturn(Optional.of(activity));
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(7L))
         .thenReturn(Optional.of(oldRule));
+    when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
+      ParticipationRule rule = call.getArgument(0);
+      setId(rule, 18L);
+      return rule;
+    });
 
     service.update(7L, new UpdateActivityRequest("更新后的抽奖", ActivityStatus.ACTIVE,
-        NOW, NOW.plusSeconds(7200), 30, 2, "{\"level\":2}"));
+        NOW, NOW.plusSeconds(7200), 30, 2, null, List.of()));
 
     ArgumentCaptor<ParticipationRule> captor = ArgumentCaptor.forClass(ParticipationRule.class);
-    verify(ruleRepository).save(captor.capture());
+    verify(ruleRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getRuleVersion()).isEqualTo(3);
     assertThat(captor.getValue().getPointsCost()).isEqualTo(30);
   }
 
   @Test
+  void storesEachLotteryRuleAsAnIndependentVersionedRow() {
+    when(activityRepository.existsByCode("RULE_DRAW")).thenReturn(false);
+    when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
+      IncentiveActivity activity = call.getArgument(0);
+      setId(activity, 11L);
+      return activity;
+    });
+    when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
+      ParticipationRule rule = call.getArgument(0);
+      setId(rule, 21L);
+      return rule;
+    });
+    when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(11L))
+        .thenReturn(Optional.of(rule(21L, 11L, 1, 10, 3, NOW)));
+    service.create(new CreateActivityRequest("RULE_DRAW", "规则抽奖", ActivityType.LOTTERY,
+        NOW, NOW.plusSeconds(3600), 10, 3, 999L,
+        List.of(new LotteryPreDrawRuleRequest(
+            "USER_LIST", true, List.of(7L, 8L), null, null))));
+
+    verify(preDrawRuleStore).save(org.mockito.ArgumentMatchers.eq(11L),
+        org.mockito.ArgumentMatchers.eq(21L),
+        org.mockito.ArgumentMatchers.argThat(definitions -> definitions.size() == 2
+            && definitions.get(0).parameters()
+                instanceof LotteryPreDrawRuleDefinition.UserListParameters users
+            && users.userIds().containsAll(List.of(7L, 8L))
+            && definitions.get(1).parameters()
+                instanceof LotteryPreDrawRuleDefinition.LuckyFallbackParameters lucky
+            && lucky.prizeId().equals(999L)));
+  }
+
+  @Test
   void rejectsInvalidActivityTime() {
     assertThatThrownBy(() -> service.create(new CreateActivityRequest("BAD_TIME", "错误时间",
-        ActivityType.REDEMPTION, NOW, NOW, 0, null, null)))
+        ActivityType.REDEMPTION, NOW, NOW, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("结束时间必须晚于开始时间");
   }
@@ -88,7 +138,7 @@ class AdminActivityServiceTest {
   @Test
   void rejectsCheckInManagementThroughGenericRules() {
     assertThatThrownBy(() -> service.create(new CreateActivityRequest("CHECK_IN", "签到",
-        ActivityType.CHECK_IN, NOW, null, 0, null, null)))
+        ActivityType.CHECK_IN, NOW, null, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("签到活动请使用签到规则管理");
   }
@@ -105,6 +155,24 @@ class AdminActivityServiceTest {
       Field field = IncentiveActivity.class.getDeclaredField("id");
       field.setAccessible(true);
       field.set(activity, id);
+    } catch (ReflectiveOperationException ex) {
+      throw new AssertionError(ex);
+    }
+  }
+
+  private ParticipationRule rule(Long id, Long activityId, int version, long pointsCost,
+      Integer dailyLimit, Instant effectiveFrom) {
+    ParticipationRule rule = new ParticipationRule(
+        activityId, version, pointsCost, dailyLimit, effectiveFrom);
+    setId(rule, id);
+    return rule;
+  }
+
+  private void setId(ParticipationRule rule, Long id) {
+    try {
+      Field field = ParticipationRule.class.getDeclaredField("id");
+      field.setAccessible(true);
+      field.set(rule, id);
     } catch (ReflectiveOperationException ex) {
       throw new AssertionError(ex);
     }

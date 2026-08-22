@@ -84,36 +84,13 @@ CREATE TABLE IF NOT EXISTS daily_check_ins (
         CHECK (reward_status IN ('PENDING', 'AWARDED', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户每日签到记录';
 
--- 事务内写入待处理任务，由后台任务可靠调用积分服务或奖品服务。
-CREATE TABLE IF NOT EXISTS incentive_outbox (
-    id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '任务ID',
-    event_type       VARCHAR(64) NOT NULL COMMENT '事件类型，例如CHECK_IN_POINTS_AWARD',
-    aggregate_type   VARCHAR(32) NOT NULL COMMENT '业务对象类型，例如DAILY_CHECK_IN',
-    aggregate_id     BIGINT UNSIGNED NOT NULL COMMENT '业务对象ID，同时作为下游幂等依据',
-    payload          JSON NOT NULL COMMENT '调用下游服务所需的事件数据',
-    status           VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态：PENDING待处理、PROCESSING处理中、PROCESSED已完成、FAILED已失败',
-    retry_count      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已重试次数',
-    next_retry_at    DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '下次允许重试时间',
-    locked_at        DATETIME(3) NULL COMMENT '任务被处理器锁定的时间',
-    last_error       VARCHAR(500) NULL COMMENT '最近一次处理失败原因',
-    processed_at     DATETIME(3) NULL COMMENT '处理完成时间',
-    created_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-    updated_at       DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_incentive_outbox_event_aggregate (event_type, aggregate_type, aggregate_id),
-    KEY idx_incentive_outbox_dispatch (status, next_retry_at, id),
-    CONSTRAINT chk_incentive_outbox_status
-        CHECK (status IN ('PENDING', 'PROCESSING', 'PROCESSED', 'FAILED'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='激励业务可靠事件任务';
-
--- 抽奖和兑换共享规则版本及资格扩展字段，具体商品价格仍保存在兑换商品上。
+-- 抽奖和兑换共享参与成本与版本；抽奖前置规则由独立规则表维护。
 CREATE TABLE IF NOT EXISTS activity_participation_rules (
     id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '参与规则ID',
     activity_id        BIGINT UNSIGNED NOT NULL COMMENT '活动ID',
     rule_version       INT UNSIGNED NOT NULL COMMENT '规则版本号',
     points_cost        BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '抽奖单次积分成本；兑换活动填0',
     daily_limit        INT UNSIGNED NULL COMMENT '每用户每日最大参与次数，为空表示不限',
-    qualification_rule JSON NULL COMMENT '黑白名单、人群、时段等资格规则扩展',
     status             VARCHAR(16) NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT草稿、ACTIVE生效、RETIRED停用',
     effective_from     DATETIME(3) NOT NULL COMMENT '生效时间',
     created_at         DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
@@ -128,6 +105,26 @@ CREATE TABLE IF NOT EXISTS activity_participation_rules (
     CONSTRAINT chk_participation_rules_status CHECK (status IN ('DRAFT', 'ACTIVE', 'RETIRED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖兑换版本化参与规则';
 
+CREATE TABLE IF NOT EXISTS lottery_pre_draw_rules (
+    id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '抽奖前置规则配置ID',
+    activity_id           BIGINT UNSIGNED NOT NULL COMMENT '所属抽奖活动ID',
+    participation_rule_id BIGINT UNSIGNED NOT NULL COMMENT '所属参与规则版本ID',
+    rule_type             VARCHAR(64) NOT NULL COMMENT '规则节点类型',
+    execution_order       INT UNSIGNED NOT NULL COMMENT '责任链执行顺序',
+    enabled               TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+    rule_config           JSON NOT NULL COMMENT '节点配置：名单数组、解锁Map、积分档位Map或幸运奖ID',
+    created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+    updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_lottery_pre_draw_rules_type (participation_rule_id, rule_type),
+    KEY idx_lottery_pre_draw_rules_activity_version (activity_id, participation_rule_id, execution_order),
+    CONSTRAINT fk_lottery_pre_draw_rules_activity
+        FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
+    CONSTRAINT fk_lottery_pre_draw_rules_participation
+        FOREIGN KEY (participation_rule_id) REFERENCES activity_participation_rules (id),
+    CONSTRAINT chk_lottery_pre_draw_rules_enabled CHECK (enabled IN (0, 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖前置责任链规则配置';
+
 CREATE TABLE IF NOT EXISTS lottery_prizes (
     id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '活动奖品配置ID',
     activity_id           BIGINT UNSIGNED NOT NULL COMMENT '抽奖活动ID',
@@ -138,9 +135,8 @@ CREATE TABLE IF NOT EXISTS lottery_prizes (
     cover_url_snapshot    VARCHAR(500) NULL COMMENT '奖品封面快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
     weight                BIGINT UNSIGNED NOT NULL COMMENT '抽奖权重，发布时约分后写入Redis槽位池',
-    campaign_quota        BIGINT UNSIGNED NULL COMMENT '活动投放名额，为空表示不限；一期不扣减',
+    campaign_quota        BIGINT UNSIGNED NULL COMMENT '活动库存编号上限；NONE奖品为空',
     display_order         INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
-    eligibility_rule     JSON NULL COMMENT '奖品解锁规则扩展',
     created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
     PRIMARY KEY (id),
@@ -149,7 +145,11 @@ CREATE TABLE IF NOT EXISTS lottery_prizes (
     CONSTRAINT fk_lottery_prizes_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
     CONSTRAINT fk_lottery_prizes_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
     CONSTRAINT chk_lottery_prizes_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS', 'NONE')),
-    CONSTRAINT chk_lottery_prizes_weight CHECK (weight > 0)
+    CONSTRAINT chk_lottery_prizes_weight CHECK (weight > 0),
+    CONSTRAINT chk_lottery_prizes_quota CHECK (
+        (prize_type_snapshot = 'NONE' AND campaign_quota IS NULL)
+        OR (prize_type_snapshot <> 'NONE' AND campaign_quota IS NOT NULL)
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖活动奖品与概率配置';
 
 CREATE TABLE IF NOT EXISTS redemption_items (
@@ -194,6 +194,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
     prize_type_snapshot    VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
     cover_url_snapshot     VARCHAR(500) NULL COMMENT '奖品封面快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '活动奖品库存编号；NONE奖品为空',
     points_cost            BIGINT UNSIGNED NOT NULL COMMENT '本次抽奖积分成本',
     points_business_id     BIGINT UNSIGNED NOT NULL COMMENT 'Snowflake积分业务号',
     points_reservation_expires_at DATETIME(3) NULL COMMENT '积分预占过期时间',
@@ -209,6 +210,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
     PRIMARY KEY (id),
     UNIQUE KEY uk_lottery_orders_request (user_id, activity_id, request_id),
     UNIQUE KEY uk_lottery_orders_points_business (points_business_id),
+    UNIQUE KEY uk_lottery_orders_prize_stock (activity_id, prize_id, stock_no),
     KEY idx_lottery_orders_user_created (user_id, created_at),
     KEY idx_lottery_orders_status_updated (status, updated_at),
     KEY idx_lottery_orders_retry (status, next_retry_at, updated_at, id),
@@ -220,7 +222,7 @@ CREATE TABLE IF NOT EXISTS lottery_orders (
         CHECK (status IN ('INIT', 'POINTS_RESERVED', 'RESULT_SAVED', 'SUCCESS', 'FAILED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖请求单与固定结果';
 
-CREATE TABLE IF NOT EXISTS lottery_participations (
+CREATE TABLE IF NOT EXISTS lottery_records (
     id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '抽奖参与记录ID',
     lottery_order_id      BIGINT UNSIGNED NOT NULL COMMENT '关联抽奖单ID，同时作为记录幂等键',
     activity_id           BIGINT UNSIGNED NOT NULL COMMENT '活动ID',
@@ -233,6 +235,7 @@ CREATE TABLE IF NOT EXISTS lottery_participations (
     prize_type_snapshot   VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
     cover_url_snapshot    VARCHAR(500) NULL COMMENT '奖品封面快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '活动奖品库存编号；NONE奖品为空',
     points_cost           BIGINT UNSIGNED NOT NULL COMMENT '本次扣除积分',
     eligibility_result    JSON NULL COMMENT '资格校验结果快照',
     point_transaction_id  BIGINT UNSIGNED NULL COMMENT '积分确认后返回的扣减流水ID',
@@ -241,21 +244,21 @@ CREATE TABLE IF NOT EXISTS lottery_participations (
     created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '参与时间',
     updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_lottery_participations_order (lottery_order_id),
-    KEY idx_lottery_participations_user_time (user_id, created_at),
-    KEY idx_lottery_participations_activity_user_time (activity_id, user_id, created_at),
-    KEY idx_lottery_participations_status_updated (status, updated_at),
-    CONSTRAINT fk_lottery_participations_order FOREIGN KEY (lottery_order_id) REFERENCES lottery_orders (id),
-    CONSTRAINT fk_lottery_participations_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
-    CONSTRAINT fk_lottery_participations_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
-    CONSTRAINT fk_lottery_participations_prize FOREIGN KEY (lottery_prize_id) REFERENCES lottery_prizes (id),
-    CONSTRAINT chk_lottery_participations_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS', 'NONE')),
-    CONSTRAINT chk_lottery_participations_status CHECK (status IN ('WAITING_CONFIRMATION', 'SUCCESS')),
-    CONSTRAINT chk_lottery_participations_confirmation CHECK (
+    UNIQUE KEY uk_lottery_records_order (lottery_order_id),
+    KEY idx_lottery_records_user_time (user_id, created_at),
+    KEY idx_lottery_records_activity_user_time (activity_id, user_id, created_at),
+    KEY idx_lottery_records_status_updated (status, updated_at),
+    CONSTRAINT fk_lottery_records_order FOREIGN KEY (lottery_order_id) REFERENCES lottery_orders (id),
+    CONSTRAINT fk_lottery_records_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
+    CONSTRAINT fk_lottery_records_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
+    CONSTRAINT fk_lottery_records_prize FOREIGN KEY (lottery_prize_id) REFERENCES lottery_prizes (id),
+    CONSTRAINT chk_lottery_records_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS', 'NONE')),
+    CONSTRAINT chk_lottery_records_status CHECK (status IN ('WAITING_CONFIRMATION', 'SUCCESS')),
+    CONSTRAINT chk_lottery_records_confirmation CHECK (
         (status = 'WAITING_CONFIRMATION' AND point_transaction_id IS NULL AND confirmed_at IS NULL)
         OR (status = 'SUCCESS' AND point_transaction_id IS NOT NULL AND confirmed_at IS NOT NULL)
     )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖参与结果与快照';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖结果记录与快照';
 
 CREATE TABLE IF NOT EXISTS redemption_records (
     id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '兑换记录ID',
@@ -301,6 +304,7 @@ CREATE TABLE IF NOT EXISTS pending_awards (
     prize_name_snapshot   VARCHAR(100) NOT NULL COMMENT '奖品名称快照',
     prize_type_snapshot   VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
     award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '抽奖库存编号；兑换任务为空',
     status                VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING待发放、PROCESSING发放中、AWARDED已发放、FAILED失败',
     retry_count           INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '重试次数预留',
     last_error            VARCHAR(500) NULL COMMENT '最近错误',

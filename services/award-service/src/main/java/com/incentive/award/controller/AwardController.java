@@ -1,6 +1,8 @@
 package com.incentive.award.controller;
 
 import com.incentive.award.application.AwardService;
+import com.incentive.award.dto.AdjustInventoryRequest;
+import com.incentive.award.dto.AwardInventoryLedgerResponse;
 import com.incentive.award.dto.AwardResponse;
 import com.incentive.award.dto.AwardUpsertRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -62,5 +64,20 @@ public class AwardController {
   @Operation(summary = "软删除奖品")
   public void delete(@PathVariable @Positive Long id) {
     service.delete(id);
+  }
+
+  @PostMapping("/{id}/inventory-adjustments")
+  @Operation(summary = "人工调整库存")
+  public AwardInventoryLedgerResponse adjustInventory(
+      @PathVariable @Positive Long id,
+      @Valid @RequestBody AdjustInventoryRequest request) {
+    return service.adjustInventory(id, request);
+  }
+
+  @GetMapping("/{id}/inventory-ledgers")
+  @Operation(summary = "查询库存流水")
+  public List<AwardInventoryLedgerResponse> inventoryLedgers(
+      @PathVariable @Positive Long id) {
+    return service.inventoryLedgers(id);
   }
 }

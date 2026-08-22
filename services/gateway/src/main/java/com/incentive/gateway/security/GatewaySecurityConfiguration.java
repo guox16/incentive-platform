@@ -51,8 +51,8 @@ public class GatewaySecurityConfiguration {
             .pathMatchers("/api/v1/internal/**").denyAll()
             .pathMatchers("/api/v1/users/admin/**").hasAuthority("ROLE_MANAGE")
             .pathMatchers("/api/v1/activities/admin/**").hasAuthority("ACTIVITY_MANAGE")
-            .pathMatchers("/api/v1/awards/prizes/*/inventory-adjustments",
-                "/api/v1/awards/prizes/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
+            .pathMatchers("/api/v1/awards/*/inventory-adjustments",
+                "/api/v1/awards/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
             .pathMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")
             .pathMatchers("/api/v1/points/me/**").hasAuthority("POINTS_SELF")
             .pathMatchers("/api/v1/activities/check-ins/me/**").hasAuthority("CHECK_IN")

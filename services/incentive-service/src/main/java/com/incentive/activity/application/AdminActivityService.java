@@ -99,6 +99,11 @@ public class AdminActivityService {
     ParticipationRule currentRule = latestRule(activity.getId());
     RuleSettings requestedSettings = new RuleSettings(request.luckyPrizeId(), preDrawRules);
     Integer requestedDailyLimit = dailyLimit(activity.getType(), request.dailyLimit());
+    if (activity.getType() == ActivityType.LOTTERY && request.status() == ActivityStatus.ACTIVE
+        && lotteryPrizeRepository.findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(
+            activity.getId(), currentRule.getId()).isEmpty()) {
+      throw conflict("PRIZE_POOL_EMPTY", "启用抽奖活动前请先配置奖池");
+    }
     activity.update(request.name().trim(), request.status(), request.startsAt(), request.endsAt());
     if (ruleChanged(currentRule, request, requestedDailyLimit, requestedSettings)) {
       ParticipationRule newRule = ruleRepository.saveAndFlush(new ParticipationRule(

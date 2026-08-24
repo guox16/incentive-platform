@@ -24,6 +24,7 @@ const loadError = ref('');
 const drawing = ref(false);
 const drawError = ref('');
 const drawNotice = ref('');
+const confirmingResult = ref(false);
 const resultOpen = ref(false);
 const activePrize = ref(0);
 const drawResult = ref<LotteryDrawResponse | null>(null);
@@ -35,6 +36,7 @@ const activity = computed(() => activities.value.find(item => item.code === acti
 const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(balance.value));
 const pendingRequestKey = (activityCode: string) => `lottery:pending-request:${activityCode}`;
 const DRAW_ANIMATION_MS = 3600;
+const DRAW_REQUEST_TIMEOUT_MS = 15_000;
 const HIGHLIGHT_INTERVAL_MS = 115;
 const RECORD_POLL_MS = 5000;
 let highlightTimer: number | undefined;
@@ -198,16 +200,17 @@ function outcomeUnknown(error: unknown) {
   return axios.isAxiosError(error) && !error.response;
 }
 
-async function handleLateOutcome(
-  outcome: Exclude<DrawOutcome, { kind: 'deadline' }>, activityCode: string,
+function applyDrawSuccess(
+  result: LotteryDrawResponse, selectedActivity: ActivityDetailResponse,
 ) {
-  if (outcome.kind === 'success') {
-    clearRequestId(activityCode);
-    balance.value = outcome.data.balanceAfter;
-  } else if (!outcomeUnknown(outcome.error) && !isPendingError(outcome.error)) {
-    clearRequestId(activityCode);
-  }
-  await loadRecords();
+  clearRequestId(selectedActivity.code);
+  drawResult.value = result;
+  balance.value = result.balanceAfter;
+  drawNotice.value = '';
+  const prizeIndex = selectedActivity.prizes.findIndex(
+    prize => prize.prizeId === result.prizeId);
+  stopPrizeHighlight(prizeIndex < 0 ? 0 : prizeIndex);
+  resultOpen.value = true;
 }
 
 async function draw() {
@@ -216,6 +219,7 @@ async function draw() {
   drawing.value = true;
   drawError.value = '';
   drawNotice.value = '';
+  confirmingResult.value = false;
   drawResult.value = null;
   resultOpen.value = false;
   const selectedActivity = activity.value;
@@ -226,44 +230,45 @@ async function draw() {
     .post<LotteryDrawResponse>(
       `/activities/lotteries/${selectedActivity.code}/draw`,
       { requestId } satisfies LotteryDrawRequest,
+      { timeout: DRAW_REQUEST_TIMEOUT_MS },
     )
     .then(response => ({ kind: 'success' as const, data: response.data }))
     .catch(error => ({ kind: 'error' as const, error }));
-  const outcome = await Promise.race<DrawOutcome>([
+  let outcome = await Promise.race<DrawOutcome>([
     requestOutcome,
     wait(DRAW_ANIMATION_MS).then(() => ({ kind: 'deadline' as const })),
   ]);
+  let delayed = false;
 
   if (outcome.kind === 'deadline') {
+    delayed = true;
     stopPrizeHighlight();
-    drawing.value = false;
-    drawNotice.value = '本次结果正在处理中，请稍后在抽奖记录中查看。';
-    void loadRecords();
-    void requestOutcome.then(lateOutcome =>
-      handleLateOutcome(lateOutcome, selectedActivity.code));
-    return;
+    confirmingResult.value = true;
+    drawNotice.value = '抽奖请求已提交，正在确认最终结果…';
+    outcome = await requestOutcome;
+  } else {
+    await wait(Math.max(0, DRAW_ANIMATION_MS - (Date.now() - startedAt)));
   }
 
-  await wait(Math.max(0, DRAW_ANIMATION_MS - (Date.now() - startedAt)));
   if (outcome.kind === 'success') {
-    clearRequestId(selectedActivity.code);
-    drawResult.value = outcome.data;
-    balance.value = outcome.data.balanceAfter;
-    const prizeIndex = selectedActivity.prizes.findIndex(
-      prize => prize.prizeId === outcome.data.prizeId);
-    stopPrizeHighlight(prizeIndex < 0 ? 0 : prizeIndex);
-    resultOpen.value = true;
+    applyDrawSuccess(outcome.data, selectedActivity);
   } else {
     stopPrizeHighlight();
+    drawNotice.value = '';
     if (isPendingError(outcome.error)) {
       drawNotice.value = '本次结果正在处理中，请稍后在抽奖记录中查看。';
     } else if (outcomeUnknown(outcome.error)) {
-      drawError.value = '网络开了个小差，请再试一次。';
+      if (delayed) {
+        drawNotice.value = '暂时未收到最终结果，请稍后在抽奖记录中查看。';
+      } else {
+        drawError.value = '网络开了个小差，请再试一次。';
+      }
     } else {
       clearRequestId(selectedActivity.code);
       drawError.value = getErrorMessage(outcome.error, '本次抽奖未完成，请稍后重试');
     }
   }
+  confirmingResult.value = false;
   drawing.value = false;
   void loadRecords();
 }
@@ -314,7 +319,7 @@ onBeforeUnmount(() => {
             </article>
           </div>
           <div v-else class="empty-pool"><strong>奖池尚未配置</strong><span>请等待活动方完成奖品配置后再参与。</span></div>
-          <div class="draw-action"><div><span>单次参与</span><strong>{{ activity.pointsCost }} <small>积分</small></strong></div><button type="button" :disabled="drawing || balance < activity.pointsCost || !activity.prizes.length" @click="draw"><span v-if="drawing" class="button-loader"></span><span>{{ drawing ? '正在抽取结果…' : !activity.prizes.length ? '奖池尚未开放' : balance < activity.pointsCost ? '当前积分不足' : `使用 ${activity.pointsCost} 积分参与` }}</span><svg v-if="!drawing && balance >= activity.pointsCost && activity.prizes.length"><use href="#lottery-arrow"/></svg></button></div>
+          <div class="draw-action"><div><span>单次参与</span><strong>{{ activity.pointsCost }} <small>积分</small></strong></div><button type="button" :disabled="drawing || balance < activity.pointsCost || !activity.prizes.length" @click="draw"><span v-if="drawing" class="button-loader"></span><span>{{ drawing ? confirmingResult ? '正在确认结果…' : '正在抽取结果…' : !activity.prizes.length ? '奖池尚未开放' : balance < activity.pointsCost ? '当前积分不足' : `使用 ${activity.pointsCost} 积分参与` }}</span><svg v-if="!drawing && balance >= activity.pointsCost && activity.prizes.length"><use href="#lottery-arrow"/></svg></button></div>
           <p v-if="drawError" class="action-error" role="alert">{{ drawError }}</p>
           <div v-if="drawNotice" class="action-notice" role="status"><span>{{ drawNotice }}</span><button type="button" @click="viewRecords">查看抽奖记录</button></div>
           <p class="counter-caption">参与成功后立即扣除积分，抽奖结果可在下方记录中查看。</p>

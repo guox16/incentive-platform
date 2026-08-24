@@ -49,6 +49,21 @@ public class LotteryPrize {
 
   protected LotteryPrize() {}
 
+  public LotteryPrize(Long activityId, Long ruleId, Long prizeId, String prizeName,
+      PrizeType prizeType, String coverUrl, String awardPayload, long weight,
+      Long campaignQuota, int displayOrder) {
+    this.activityId = activityId;
+    this.ruleId = ruleId;
+    this.prizeId = prizeId;
+    this.prizeName = prizeName;
+    this.prizeType = prizeType;
+    this.coverUrl = coverUrl;
+    this.awardPayload = awardPayload;
+    this.weight = weight;
+    this.campaignQuota = campaignQuota;
+    this.displayOrder = displayOrder;
+  }
+
   public LotteryPrize copyToRule(Long newRuleId) {
     LotteryPrize copy = new LotteryPrize();
     copy.activityId = activityId;

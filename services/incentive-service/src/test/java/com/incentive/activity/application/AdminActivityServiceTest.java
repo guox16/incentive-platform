@@ -12,6 +12,7 @@ import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
+import com.incentive.activity.domain.LotteryPrize;
 import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.dto.CreateActivityRequest;
 import com.incentive.activity.dto.LotteryPreDrawRuleRequest;
@@ -108,6 +109,8 @@ class AdminActivityServiceTest {
     when(activityRepository.findById(7L)).thenReturn(Optional.of(activity));
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(7L))
         .thenReturn(Optional.of(oldRule));
+    when(lotteryPrizeRepository.findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(7L, 17L))
+        .thenReturn(List.of(org.mockito.Mockito.mock(LotteryPrize.class)));
     when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
       ParticipationRule rule = call.getArgument(0);
       setId(rule, 18L);

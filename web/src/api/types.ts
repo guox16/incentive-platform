@@ -192,6 +192,33 @@ export type UpdateActivityRequest = Omit<CreateActivityRequest, 'type'> & {
   status: ActivityStatus;
 };
 
+export type PrizePoolCandidate = {
+  prizeId: number;
+  code: string | null;
+  name: string;
+  type: PrizeType;
+  availableStock: number;
+};
+
+export type ConfiguredPrizePoolItem = PrizePoolCandidate & {
+  weight: number;
+  campaignQuota: number | null;
+  displayOrder: number;
+};
+
+export type AdminPrizePoolResponse = {
+  configured: ConfiguredPrizePoolItem[];
+  candidates: PrizePoolCandidate[];
+};
+
+export type UpdatePrizePoolRequest = {
+  prizes: Array<{
+    prizeId: number;
+    weight: number;
+    campaignQuota: number | null;
+  }>;
+};
+
 export type LotteryDrawRequest = {
   requestId: string;
 };

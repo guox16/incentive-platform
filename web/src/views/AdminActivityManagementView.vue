@@ -113,7 +113,9 @@ function toLocalDate(value: string | null) {
 }
 function resetFilters() { keyword.value = ''; typeFilter.value = 'ALL'; statusFilter.value = 'ALL'; }
 function openCreate() {
-  Object.assign(draft, blankDraft()); prizeCandidates.value = []; prizePoolEditable.value = false;
+  Object.assign(draft, blankDraft());
+  delete draft.id;
+  prizeCandidates.value = []; prizePoolEditable.value = false;
   formError.value = ''; drawerOpen.value = true;
 }
 async function openEdit(item: AdminActivityResponse) {
@@ -318,14 +320,14 @@ onMounted(loadActivities);
     <AccountHeader active="admin-activities" />
     <main class="admin-workspace">
       <header class="page-head">
-        <div><p class="crumb">运营管理 <span></span> 活动管理</p><h1>活动管理</h1><p>配置抽奖与兑换活动的周期、参与成本和每日限额。</p></div>
+        <div><p class="crumb">运营管理 <span></span> 活动管理</p><h1>活动管理</h1><p>配置抽奖活动的周期、参与成本和每日限额。</p></div>
         <button class="primary-button" type="button" @click="openCreate">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>新建活动
         </button>
       </header>
 
       <section class="overview" aria-label="活动概览">
-        <div><span>全部活动</span><strong>{{ activities.length }}</strong><small>抽奖与兑换活动</small></div>
+        <div><span>全部活动</span><strong>{{ activities.length }}</strong><small>抽奖活动</small></div>
         <div><span>正在进行</span><strong>{{ activeCount }}</strong><small>状态已设为进行中</small></div>
         <div><span>等待开始</span><strong>{{ scheduledCount }}</strong><small>开始时间尚未到达</small></div>
         <p>活动进入“进行中”后，仍需处于设定周期内，用户端才会展示并允许参与。</p>
@@ -362,9 +364,7 @@ onMounted(loadActivities);
         <header><div><span>{{ draft.id ? '编辑活动' : '新建活动' }}</span><h2 id="activity-drawer-title">{{ draft.id ? draft.name : '创建活动与首版规则' }}</h2></div><button type="button" aria-label="关闭" @click="drawerOpen = false"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
         <div class="drawer-body">
           <label><span>活动名称 <b>*</b></span><input v-model="draft.name" maxlength="100" placeholder="例如：夏日幸运抽奖" /></label>
-          <label><span>活动类型</span><select v-model="draft.type" :disabled="!!draft.id"><option value="LOTTERY">抽奖活动</option></select></label>
           <div class="field-row"><label><span>开始时间 <b>*</b></span><input v-model="draft.startsAt" type="datetime-local" /></label><label><span>结束时间</span><input v-model="draft.endsAt" type="datetime-local" /><small>留空表示长期有效</small></label></div>
-          <label v-if="draft.id"><span>活动状态</span><select v-model="draft.status"><option value="DRAFT">草稿</option><option value="ACTIVE">进行中</option><option value="PAUSED">已暂停</option><option value="ENDED">已结束</option></select></label>
           <fieldset v-if="draft.type === 'LOTTERY'" class="prize-pool-fieldset">
             <legend>奖池配置</legend>
             <div class="pool-heading"><p>{{ draft.id ? '仅显示已上架、有库存且未被其他活动使用的奖品。' : '先保存活动，之后即可从奖品目录选择奖品。' }}</p><button v-if="draft.id && prizePoolEditable" class="add-rule" type="button" :disabled="prizePoolLoading || !availablePoolOptions(-1).length" @click="addPoolPrize">添加奖品</button></div>

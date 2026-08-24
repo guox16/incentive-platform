@@ -53,7 +53,7 @@ public class AdminPrizePoolService {
         .toList();
     List<AdminPrizePoolResponse.PrizeCandidate> candidates = awards.stream()
         .filter(this::hasUsableStock)
-        .filter(award -> !occupied.contains(award.id()))
+        .filter(award -> award.type() == PrizeType.NONE || !occupied.contains(award.id()))
         .map(award -> new AdminPrizePoolResponse.PrizeCandidate(
             award.id(), award.code(), award.name(), award.type(), award.availableStock()))
         .toList();
@@ -82,7 +82,7 @@ public class AdminPrizePoolService {
       if (award == null || !hasUsableStock(award)) {
         throw conflict("PRIZE_NOT_AVAILABLE", "所选奖品已下架或库存不足，请重新选择");
       }
-      if (occupied.contains(entry.prizeId())) {
+      if (award.type() != PrizeType.NONE && occupied.contains(entry.prizeId())) {
         throw conflict("PRIZE_ALREADY_ASSIGNED", "所选奖品已参与其他活动，请重新选择");
       }
       if (award.type() == PrizeType.NONE && entry.campaignQuota() != null) {

@@ -64,6 +64,17 @@ public class AwardService {
   }
 
   @Transactional
+  public AwardResponse updateStatus(Long id, AwardStatus status) {
+    if (status == AwardStatus.DELETED) {
+      throw new AwardBusinessException("AWARD_STATUS_INVALID",
+          "不能通过状态更新接口设置软删除状态", HttpStatus.BAD_REQUEST);
+    }
+    Award award = find(id);
+    award.updateStatus(status, clock.instant());
+    return response(award);
+  }
+
+  @Transactional
   public void delete(Long id) {
     find(id).softDelete(clock.instant());
   }

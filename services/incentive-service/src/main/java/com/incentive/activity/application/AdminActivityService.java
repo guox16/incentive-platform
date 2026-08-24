@@ -20,6 +20,10 @@ import com.incentive.activity.infrastructure.BusinessNumberGenerator;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
+import com.incentive.activity.repository.LotteryPreDrawRuleConfigRepository;
+import com.incentive.activity.repository.RedemptionItemRepository;
+import com.incentive.activity.repository.RedemptionRecordRepository;
+import com.incentive.activity.repository.LotteryOrderRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,6 +45,10 @@ public class AdminActivityService {
   private final ParticipationRuleRepository ruleRepository;
   private final LotteryPreDrawRuleStore preDrawRuleStore;
   private final LotteryPrizeRepository lotteryPrizeRepository;
+  private final LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository;
+  private final RedemptionItemRepository redemptionItemRepository;
+  private final RedemptionRecordRepository redemptionRecordRepository;
+  private final LotteryOrderRepository lotteryOrderRepository;
   private final LotteryPreDrawRuleChain preDrawRuleChain;
   private final BusinessNumberGenerator businessNumberGenerator;
   private final Clock clock;
@@ -49,12 +57,20 @@ public class AdminActivityService {
       ParticipationRuleRepository ruleRepository,
       LotteryPreDrawRuleStore preDrawRuleStore,
       LotteryPrizeRepository lotteryPrizeRepository,
+      LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository,
+      RedemptionItemRepository redemptionItemRepository,
+      RedemptionRecordRepository redemptionRecordRepository,
+      LotteryOrderRepository lotteryOrderRepository,
       LotteryPreDrawRuleChain preDrawRuleChain,
       BusinessNumberGenerator businessNumberGenerator, Clock clock) {
     this.activityRepository = activityRepository;
     this.ruleRepository = ruleRepository;
     this.preDrawRuleStore = preDrawRuleStore;
     this.lotteryPrizeRepository = lotteryPrizeRepository;
+    this.preDrawRuleConfigRepository = preDrawRuleConfigRepository;
+    this.redemptionItemRepository = redemptionItemRepository;
+    this.redemptionRecordRepository = redemptionRecordRepository;
+    this.lotteryOrderRepository = lotteryOrderRepository;
     this.preDrawRuleChain = preDrawRuleChain;
     this.businessNumberGenerator = businessNumberGenerator;
     this.clock = clock;
@@ -113,6 +129,24 @@ public class AdminActivityService {
       savePreDrawRules(activity, newRule, request.luckyPrizeId(), preDrawRules);
     }
     return response(activity);
+  }
+
+  @Transactional
+  public void delete(Long id) {
+    IncentiveActivity activity = find(id);
+    ensureManageable(activity.getType());
+    if (activity.getStatus() != ActivityStatus.ENDED) {
+      throw conflict("ACTIVITY_NOT_ENDED", "请先结束活动，再执行删除操作");
+    }
+    if (lotteryOrderRepository.countByActivityId(id) > 0
+        || redemptionRecordRepository.countByActivityId(id) > 0) {
+      throw conflict("ACTIVITY_HAS_PARTICIPATION", "已有参与记录的活动不能删除");
+    }
+    preDrawRuleConfigRepository.deleteByActivityId(id);
+    lotteryPrizeRepository.deleteByActivityId(id);
+    redemptionItemRepository.deleteByActivityId(id);
+    ruleRepository.deleteByActivityId(id);
+    activityRepository.delete(activity);
   }
 
   private void copyLotteryPrizes(IncentiveActivity activity, ParticipationRule currentRule,

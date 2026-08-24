@@ -82,6 +82,18 @@ class AwardServiceTest {
         .hasMessage("请使用库存调整接口修改库存");
   }
 
+  @Test
+  void changesStatusWithoutSendingStaleInventory() {
+    Award award = award(1L, 10, 7);
+    when(awardRepository.findByIdAndStatusNot(1L, AwardStatus.DELETED))
+        .thenReturn(Optional.of(award));
+
+    var response = service.updateStatus(1L, AwardStatus.INACTIVE);
+
+    assertThat(response.status()).isEqualTo(AwardStatus.INACTIVE);
+    assertThat(response.availableStock()).isEqualTo(7);
+  }
+
   private Award award(Long id, long totalStock, long availableStock) {
     Award award = new Award("PRIZE_VIRTUAL_EXISTING", request(totalStock, availableStock), NOW);
     setId(award, id);

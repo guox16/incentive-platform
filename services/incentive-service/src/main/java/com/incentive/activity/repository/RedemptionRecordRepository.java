@@ -16,4 +16,6 @@ public interface RedemptionRecordRepository extends JpaRepository<RedemptionReco
   Optional<RedemptionRecord> findByIdForUpdate(@Param("id") Long id);
 
   long countByItemId(Long itemId);
+
+  long countByActivityId(Long activityId);
 }

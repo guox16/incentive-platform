@@ -12,6 +12,8 @@ public interface LotteryPrizeRepository extends JpaRepository<LotteryPrize, Long
   List<LotteryPrize> findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(Long activityId, Long ruleId);
   Optional<LotteryPrize> findByIdAndActivityIdAndRuleId(Long id, Long activityId, Long ruleId);
 
+  void deleteByActivityId(Long activityId);
+
   @Query("""
       select distinct prize.prizeId from LotteryPrize prize
       where prize.activityId <> :activityId

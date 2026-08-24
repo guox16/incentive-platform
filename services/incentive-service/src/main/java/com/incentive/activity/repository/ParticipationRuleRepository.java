@@ -11,4 +11,6 @@ public interface ParticipationRuleRepository extends JpaRepository<Participation
           Long activityId, ParticipationRule.Status status, Instant now);
 
   Optional<ParticipationRule> findFirstByActivityIdOrderByRuleVersionDesc(Long activityId);
+
+  void deleteByActivityId(Long activityId);
 }

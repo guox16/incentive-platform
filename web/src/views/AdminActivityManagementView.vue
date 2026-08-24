@@ -304,6 +304,12 @@ async function setStatus(item: AdminActivityResponse, status: ActivityStatus) {
     await http.put(`/activities/admin/${item.id}`, body); await loadActivities();
   } catch (cause) { error.value = message(cause, '状态更新失败，请稍后重试。'); }
 }
+async function deleteActivity(item: AdminActivityResponse) {
+  if (!window.confirm(`确认删除“${item.name}”吗？删除后无法恢复。`)) return;
+  try {
+    await http.delete(`/activities/admin/${item.id}`); await loadActivities();
+  } catch (cause) { error.value = message(cause, '删除失败，请稍后重试。'); }
+}
 onMounted(loadActivities);
 </script>
 
@@ -344,7 +350,7 @@ onMounted(loadActivities);
             <td><div class="rule"><strong>{{ item.type === 'LOTTERY' ? `${item.pointsCost} 积分 / 次` : '按商品定价' }}</strong><small>{{ item.type === 'LOTTERY' ? (item.dailyLimit ? `每日最多 ${item.dailyLimit} 次` : '每日不限次数') : '不限兑换次数' }} · v{{ item.ruleVersion }}</small></div></td>
             <td><span :class="['status', item.status.toLowerCase()]">{{ statusName(item.status) }}</span></td>
             <td class="date">{{ formatDate(item.updatedAt) }}</td>
-            <td class="actions"><button type="button" @click="openEdit(item)">编辑</button><button v-if="item.status !== 'ACTIVE'" type="button" @click="setStatus(item, 'ACTIVE')">启用</button><button v-else type="button" @click="setStatus(item, 'PAUSED')">暂停</button></td>
+            <td class="actions"><button type="button" @click="openEdit(item)">编辑</button><button v-if="item.status === 'ACTIVE'" type="button" @click="setStatus(item, 'PAUSED')">暂停</button><button v-else-if="item.status !== 'ENDED'" type="button" @click="setStatus(item, 'ACTIVE')">启用</button><button v-if="item.status !== 'ENDED'" class="danger" type="button" @click="setStatus(item, 'ENDED')">结束</button><button v-else class="danger" type="button" @click="deleteActivity(item)">删除</button></td>
           </tr></tbody>
         </table>
         <footer v-if="!loading && filteredActivities.length"><span>共 {{ filteredActivities.length }} 项</span><span>参与规则发生变化时自动保留新版本</span></footer>

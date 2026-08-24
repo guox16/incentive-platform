@@ -3,6 +3,7 @@ package com.incentive.activity.controller;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,5 +38,13 @@ class AdminActivityControllerTest {
         .andExpect(jsonPath("$.candidates").isArray());
 
     verify(prizePoolService).get(5L, "Bearer test-token");
+  }
+
+  @Test
+  void deletesDraftActivity() throws Exception {
+    mockMvc.perform(delete("/api/v1/activities/admin/5"))
+        .andExpect(status().isNoContent());
+
+    verify(activityService).delete(5L);
   }
 }

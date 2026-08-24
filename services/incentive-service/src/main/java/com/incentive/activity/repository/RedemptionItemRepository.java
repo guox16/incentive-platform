@@ -11,4 +11,6 @@ public interface RedemptionItemRepository extends JpaRepository<RedemptionItem, 
 
   Optional<RedemptionItem> findByIdAndActivityIdAndRuleIdAndStatus(
       Long id, Long activityId, Long ruleId, RedemptionItem.Status status);
+
+  void deleteByActivityId(Long activityId);
 }

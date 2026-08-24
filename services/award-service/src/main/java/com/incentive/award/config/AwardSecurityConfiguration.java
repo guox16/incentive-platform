@@ -4,6 +4,7 @@ import com.incentive.common.security.PlatformJwtConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -20,6 +21,8 @@ public class AwardSecurityConfiguration {
         .authorizeHttpRequests(requests -> requests
             .requestMatchers("/actuator/health", "/actuator/info", "/v3/api-docs/**",
                 "/swagger-ui/**", "/swagger-ui.html").permitAll()
+            .requestMatchers(HttpMethod.PATCH, "/api/v1/awards/status")
+                .hasAuthority("PRIZE_MANAGE")
             .requestMatchers("/api/v1/awards/*/inventory-adjustments",
                 "/api/v1/awards/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
             .requestMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")

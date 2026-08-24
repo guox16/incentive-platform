@@ -16,6 +16,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -65,6 +66,13 @@ public class AdminActivityController {
   public AdminActivityResponse update(@PathVariable("id") Long id,
       @Valid @RequestBody UpdateActivityRequest request) {
     return service.update(id, request);
+  }
+
+  @DeleteMapping("/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  @Operation(summary = "删除已结束且无参与记录的活动")
+  public void delete(@PathVariable("id") Long id) {
+    service.delete(id);
   }
 
   @GetMapping("/{id}/prize-pool")

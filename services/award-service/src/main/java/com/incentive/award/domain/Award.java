@@ -67,6 +67,11 @@ public class Award {
     apply(request, now);
   }
 
+  public void updateStatus(AwardStatus status, Instant now) {
+    this.status = status;
+    updatedAt = now;
+  }
+
   public void softDelete(Instant now) {
     status = AwardStatus.DELETED;
     updatedAt = now;

@@ -93,15 +93,7 @@ async function save() {
 async function setStatus(ids: number[], status: PrizeStatus) {
   if (!ids.length) return;
   try {
-    await Promise.all(ids.map(async id => {
-      const prize = allPrizes.value.find(item => item.id === id); if (!prize) return;
-      const body: AwardUpsertRequest = {
-        name: prize.name, type: prize.type, status,
-        coverUrl: prize.coverUrl, awardPayload: prize.awardPayload,
-        totalStock: prize.totalStock, availableStock: prize.availableStock,
-      };
-      await http.put(`/awards/${id}`, body);
-    }));
+    await http.patch('/awards/status', { ids, status });
     selected.value = []; await loadPrizes();
   } catch (cause) { error.value = message(cause, '状态更新失败，请稍后重试。'); }
 }

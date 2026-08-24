@@ -10,6 +10,7 @@ import com.incentive.award.domain.AwardStatus;
 import com.incentive.award.domain.AwardType;
 import com.incentive.award.dto.AdjustInventoryRequest;
 import com.incentive.award.dto.AwardUpsertRequest;
+import com.incentive.award.infrastructure.BusinessNumberGenerator;
 import com.incentive.award.repository.AwardInventoryLedgerRepository;
 import com.incentive.award.repository.AwardRepository;
 import com.incentive.award.support.AwardBusinessException;
@@ -30,17 +31,19 @@ class AwardServiceTest {
 
   @Mock private AwardRepository awardRepository;
   @Mock private AwardInventoryLedgerRepository ledgerRepository;
+  @Mock private BusinessNumberGenerator businessNumberGenerator;
   private AwardService service;
 
   @BeforeEach
   void setUp() {
     service = new AwardService(
-        awardRepository, ledgerRepository, Clock.fixed(NOW, ZoneOffset.UTC));
+        awardRepository, ledgerRepository, businessNumberGenerator,
+        Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
   @Test
   void createsAwardInUnifiedTable() {
-    when(awardRepository.existsByCode("COUPON_5")).thenReturn(false);
+    when(businessNumberGenerator.next()).thenReturn(12345L);
     when(awardRepository.save(any(Award.class))).thenAnswer(call -> {
       Award award = call.getArgument(0);
       setId(award, 1L);
@@ -50,17 +53,9 @@ class AwardServiceTest {
     var response = service.create(request(10, 10));
 
     assertThat(response.id()).isEqualTo(1L);
+    assertThat(response.code()).isEqualTo("PRIZE_VIRTUAL_9IX");
     assertThat(response.status()).isEqualTo(AwardStatus.ACTIVE);
     assertThat(response.availableStock()).isEqualTo(10);
-  }
-
-  @Test
-  void rejectsDuplicateCode() {
-    when(awardRepository.existsByCode("COUPON_5")).thenReturn(true);
-
-    assertThatThrownBy(() -> service.create(request(0, 0)))
-        .isInstanceOf(AwardBusinessException.class)
-        .hasMessage("奖品编码已存在");
   }
 
   @Test
@@ -88,14 +83,14 @@ class AwardServiceTest {
   }
 
   private Award award(Long id, long totalStock, long availableStock) {
-    Award award = new Award(request(totalStock, availableStock), NOW);
+    Award award = new Award("PRIZE_VIRTUAL_EXISTING", request(totalStock, availableStock), NOW);
     setId(award, id);
     return award;
   }
 
   private AwardUpsertRequest request(long totalStock, long availableStock) {
     return new AwardUpsertRequest(
-        "COUPON_5", "5 元券", AwardType.VIRTUAL, AwardStatus.ACTIVE,
+        "5 元券", AwardType.VIRTUAL, AwardStatus.ACTIVE,
         null, "{\"coupon\":\"5\"}", totalStock, availableStock);
   }
 

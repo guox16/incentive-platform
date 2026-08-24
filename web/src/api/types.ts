@@ -76,7 +76,6 @@ export type PrizeResponse = {
 };
 
 export type AwardUpsertRequest = {
-  code: string;
   name: string;
   type: PrizeType;
   status: PrizeStatus;
@@ -179,7 +178,6 @@ export type AdminActivityResponse = ActivitySummaryResponse & {
 };
 
 export type CreateActivityRequest = {
-  code: string;
   name: string;
   type: Exclude<ActivityType, 'CHECK_IN'>;
   startsAt: string;
@@ -190,7 +188,7 @@ export type CreateActivityRequest = {
   preDrawRules: LotteryPreDrawRule[];
 };
 
-export type UpdateActivityRequest = Omit<CreateActivityRequest, 'code' | 'type'> & {
+export type UpdateActivityRequest = Omit<CreateActivityRequest, 'type'> & {
   status: ActivityStatus;
 };
 

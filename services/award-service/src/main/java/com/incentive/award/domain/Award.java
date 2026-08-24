@@ -57,8 +57,8 @@ public class Award {
 
   protected Award() {}
 
-  public Award(AwardUpsertRequest request, Instant now) {
-    this.code = request.code().trim();
+  public Award(String code, AwardUpsertRequest request, Instant now) {
+    this.code = code;
     this.createdAt = now;
     apply(request, now);
   }

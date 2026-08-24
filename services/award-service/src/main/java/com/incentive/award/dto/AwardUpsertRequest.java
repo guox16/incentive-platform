@@ -5,12 +5,10 @@ import com.incentive.award.domain.AwardStatus;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 public record AwardUpsertRequest(
-    @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Z][A-Z0-9_]*$") String code,
     @NotBlank @Size(max = 100) String name,
     @NotNull AwardType type,
     @NotNull AwardStatus status,

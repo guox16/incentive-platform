@@ -16,6 +16,7 @@ import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.dto.CreateActivityRequest;
 import com.incentive.activity.dto.LotteryPreDrawRuleRequest;
 import com.incentive.activity.dto.UpdateActivityRequest;
+import com.incentive.activity.infrastructure.BusinessNumberGenerator;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
@@ -41,18 +42,19 @@ class AdminActivityServiceTest {
   @Mock LotteryPreDrawRuleStore preDrawRuleStore;
   @Mock LotteryPrizeRepository lotteryPrizeRepository;
   @Mock LotteryPreDrawRuleChain preDrawRuleChain;
+  @Mock BusinessNumberGenerator businessNumberGenerator;
   AdminActivityService service;
 
   @BeforeEach
   void setUp() {
     service = new AdminActivityService(activityRepository, ruleRepository, preDrawRuleStore,
-        lotteryPrizeRepository, preDrawRuleChain,
+        lotteryPrizeRepository, preDrawRuleChain, businessNumberGenerator,
         Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
   @Test
   void createsDraftActivityWithFirstRule() {
-    when(activityRepository.existsByCode("SUMMER_DRAW")).thenReturn(false);
+    when(businessNumberGenerator.next()).thenReturn(12345L);
     when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
       IncentiveActivity activity = call.getArgument(0);
       setId(activity, 9L);
@@ -66,9 +68,10 @@ class AdminActivityServiceTest {
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(9L))
         .thenReturn(Optional.of(rule(19L, 9L, 1, 20, 3, NOW)));
 
-    var response = service.create(new CreateActivityRequest("SUMMER_DRAW", "夏日抽奖",
+    var response = service.create(new CreateActivityRequest("夏日抽奖",
         ActivityType.LOTTERY, NOW, NOW.plusSeconds(3600), 20, 3, null, List.of()));
 
+    assertThat(response.code()).isEqualTo("LOTTERY_9IX");
     assertThat(response.status()).isEqualTo(ActivityStatus.DRAFT);
     assertThat(response.ruleVersion()).isEqualTo(1);
     verify(preDrawRuleChain).validateConfiguration(List.of(), null);
@@ -76,7 +79,7 @@ class AdminActivityServiceTest {
 
   @Test
   void redemptionActivityDoesNotPersistDailyLimit() {
-    when(activityRepository.existsByCode("POINTS_MALL")).thenReturn(false);
+    when(businessNumberGenerator.next()).thenReturn(12346L);
     when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
       IncentiveActivity activity = call.getArgument(0);
       setId(activity, 10L);
@@ -90,7 +93,7 @@ class AdminActivityServiceTest {
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(10L))
         .thenReturn(Optional.of(rule(20L, 10L, 1, 0, null, NOW)));
 
-    service.create(new CreateActivityRequest("POINTS_MALL", "积分商城",
+    service.create(new CreateActivityRequest("积分商城",
         ActivityType.REDEMPTION, NOW, null, 0, 3, null, List.of()));
 
     ArgumentCaptor<ParticipationRule> captor = ArgumentCaptor.forClass(ParticipationRule.class);
@@ -122,7 +125,7 @@ class AdminActivityServiceTest {
 
   @Test
   void storesEachLotteryRuleAsAnIndependentVersionedRow() {
-    when(activityRepository.existsByCode("RULE_DRAW")).thenReturn(false);
+    when(businessNumberGenerator.next()).thenReturn(12347L);
     when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
       IncentiveActivity activity = call.getArgument(0);
       setId(activity, 11L);
@@ -135,7 +138,7 @@ class AdminActivityServiceTest {
     });
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(11L))
         .thenReturn(Optional.of(rule(21L, 11L, 1, 10, 3, NOW)));
-    service.create(new CreateActivityRequest("RULE_DRAW", "规则抽奖", ActivityType.LOTTERY,
+    service.create(new CreateActivityRequest("规则抽奖", ActivityType.LOTTERY,
         NOW, NOW.plusSeconds(3600), 10, 3, 999L,
         List.of(new LotteryPreDrawRuleRequest(
             "USER_LIST", true, List.of(7L, 8L), null, null))));
@@ -153,7 +156,7 @@ class AdminActivityServiceTest {
 
   @Test
   void rejectsInvalidActivityTime() {
-    assertThatThrownBy(() -> service.create(new CreateActivityRequest("BAD_TIME", "错误时间",
+    assertThatThrownBy(() -> service.create(new CreateActivityRequest("错误时间",
         ActivityType.REDEMPTION, NOW, NOW, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("结束时间必须晚于开始时间");
@@ -161,7 +164,7 @@ class AdminActivityServiceTest {
 
   @Test
   void rejectsCheckInManagementThroughGenericRules() {
-    assertThatThrownBy(() -> service.create(new CreateActivityRequest("CHECK_IN", "签到",
+    assertThatThrownBy(() -> service.create(new CreateActivityRequest("签到",
         ActivityType.CHECK_IN, NOW, null, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("签到活动请使用签到规则管理");

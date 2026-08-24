@@ -86,7 +86,7 @@ class AwardInventoryServiceTest {
   }
 
   private Award award(Long id, long totalStock, long availableStock) {
-    Award award = new Award(new AwardUpsertRequest("COUPON", "优惠券",
+    Award award = new Award("PRIZE_VIRTUAL_EXISTING", new AwardUpsertRequest("优惠券",
         com.incentive.award.domain.AwardType.VIRTUAL,
         com.incentive.award.domain.AwardStatus.ACTIVE, null, "{}", totalStock, availableStock), NOW);
     ReflectionTestUtils.setField(award, "id", id);

@@ -17,5 +17,4 @@ public interface AwardRepository extends JpaRepository<Award, Long> {
 
   Optional<Award> findByIdAndStatusNot(Long id, AwardStatus status);
   List<Award> findByStatusNotOrderByIdAsc(AwardStatus status);
-  boolean existsByCode(String code);
 }

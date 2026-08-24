@@ -2,7 +2,6 @@ package com.incentive.activity.repository;
 
 import com.incentive.activity.domain.RedemptionRecord;
 import jakarta.persistence.LockModeType;
-import java.time.Instant;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -15,9 +14,6 @@ public interface RedemptionRecordRepository extends JpaRepository<RedemptionReco
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select record from RedemptionRecord record where record.id = :id")
   Optional<RedemptionRecord> findByIdForUpdate(@Param("id") Long id);
-
-  long countByActivityIdAndUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-      Long activityId, Long userId, Instant from, Instant to);
 
   long countByItemId(Long itemId);
 }

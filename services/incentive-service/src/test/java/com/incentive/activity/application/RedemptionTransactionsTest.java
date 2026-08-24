@@ -92,12 +92,25 @@ class RedemptionTransactionsTest {
     verify(recordRepository, never()).saveAndFlush(any());
   }
 
+  @Test
+  void configuredDailyLimitDoesNotBlockRedemption() {
+    IncentiveActivity activity = activity();
+    ParticipationRule rule = rule();
+    RedemptionItem item = item();
+    arrange(activity, rule, item);
+    when(recordRepository.countByItemId(10L)).thenReturn(0L);
+    when(recordRepository.saveAndFlush(any(RedemptionRecord.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    RedemptionRecord record = transactions.createPending(
+        "request-unlimited", "POINTS_MALL", 10L, 7L, 8003L);
+
+    assertThat(record.getStatus()).isEqualTo(RedemptionStatus.PENDING);
+  }
+
   private void arrange(IncentiveActivity activity, ParticipationRule rule, RedemptionItem item) {
     when(activityRepository.findByCodeForUpdate("POINTS_MALL")).thenReturn(Optional.of(activity));
     when(activityQueryService.findRule(1L, NOW)).thenReturn(rule);
-    when(recordRepository
-        .countByActivityIdAndUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-            any(), any(), any(), any())).thenReturn(0L);
     when(itemRepository.findByIdAndActivityIdAndRuleIdAndStatus(
         10L, 1L, 2L, RedemptionItem.Status.ACTIVE)).thenReturn(Optional.of(item));
   }

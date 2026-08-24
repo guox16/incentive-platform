@@ -147,7 +147,7 @@ function validate() {
   if (!draft.startsAt) return '请选择活动开始时间。';
   if (draft.endsAt && new Date(draft.endsAt) <= new Date(draft.startsAt)) return '结束时间必须晚于开始时间。';
   if (draft.pointsCost < 0) return '积分成本不能小于 0。';
-  if (draft.dailyLimit !== null && draft.dailyLimit < 1) return '每日参与上限至少为 1，留空表示不限。';
+  if (draft.type === 'LOTTERY' && draft.dailyLimit !== null && draft.dailyLimit < 1) return '每日参与上限至少为 1，留空表示不限。';
   if (draft.type !== 'LOTTERY') return '';
   if (draft.luckyPrizeId !== null && draft.luckyPrizeId !== '' && draft.luckyPrizeId <= 0) return '幸运奖奖品 ID 必须是正整数。';
   for (const rule of draft.preDrawRules) {
@@ -197,7 +197,7 @@ async function save() {
   const lotteryRules = draft.type === 'LOTTERY' ? draft.preDrawRules.map(serializeRule) : [];
   const common = { name: draft.name.trim(), startsAt: new Date(draft.startsAt).toISOString(),
     endsAt: draft.endsAt ? new Date(draft.endsAt).toISOString() : null, pointsCost: Number(draft.pointsCost),
-    dailyLimit: draft.dailyLimit === null ? null : Number(draft.dailyLimit),
+    dailyLimit: draft.type === 'LOTTERY' && draft.dailyLimit !== null ? Number(draft.dailyLimit) : null,
     luckyPrizeId: draft.type === 'LOTTERY' && draft.luckyPrizeId !== '' ? draft.luckyPrizeId : null,
     preDrawRules: lotteryRules };
   try {
@@ -215,7 +215,7 @@ async function save() {
 async function setStatus(item: AdminActivityResponse, status: ActivityStatus) {
   try {
     const body: UpdateActivityRequest = { name: item.name, status, startsAt: item.startsAt, endsAt: item.endsAt,
-      pointsCost: item.pointsCost, dailyLimit: item.dailyLimit, luckyPrizeId: item.luckyPrizeId,
+      pointsCost: item.pointsCost, dailyLimit: item.type === 'LOTTERY' ? item.dailyLimit : null, luckyPrizeId: item.luckyPrizeId,
       preDrawRules: item.preDrawRules.map(rule => ({
         type: rule.type, enabled: rule.enabled, userIds: rule.userIds,
         prizeMinimumDrawCounts: rule.prizeMinimumDrawCounts,
@@ -260,7 +260,7 @@ onMounted(loadActivities);
           <tbody><tr v-for="item in filteredActivities" :key="item.id">
             <td><div class="activity-info"><span :class="['type-mark', item.type.toLowerCase()]"><svg v-if="item.type === 'LOTTERY'" viewBox="0 0 24 24"><path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13M7.5 7C5 7 5 3.5 7.5 3.5c2 0 4.5 3.5 4.5 3.5s2.5-3.5 4.5-3.5C19 3.5 19 7 16.5 7"/></svg><svg v-else viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/></svg></span><div><strong>{{ item.name }}</strong><small>{{ item.code }} · {{ typeName(item.type) }}</small></div></div></td>
             <td class="period"><strong>{{ formatDate(item.startsAt) }}</strong><small>至 {{ formatDate(item.endsAt) }}</small></td>
-            <td><div class="rule"><strong>{{ item.type === 'LOTTERY' ? `${item.pointsCost} 积分 / 次` : '按商品定价' }}</strong><small>{{ item.dailyLimit ? `每日最多 ${item.dailyLimit} 次` : '每日不限次数' }} · v{{ item.ruleVersion }}</small></div></td>
+            <td><div class="rule"><strong>{{ item.type === 'LOTTERY' ? `${item.pointsCost} 积分 / 次` : '按商品定价' }}</strong><small>{{ item.type === 'LOTTERY' ? (item.dailyLimit ? `每日最多 ${item.dailyLimit} 次` : '每日不限次数') : '不限兑换次数' }} · v{{ item.ruleVersion }}</small></div></td>
             <td><span :class="['status', item.status.toLowerCase()]">{{ statusName(item.status) }}</span></td>
             <td class="date">{{ formatDate(item.updatedAt) }}</td>
             <td class="actions"><button type="button" @click="openEdit(item)">编辑</button><button v-if="item.status !== 'ACTIVE'" type="button" @click="setStatus(item, 'ACTIVE')">启用</button><button v-else type="button" @click="setStatus(item, 'PAUSED')">暂停</button></td>
@@ -278,7 +278,7 @@ onMounted(loadActivities);
           <div class="field-row"><label><span>活动编码 <b>*</b></span><input v-model="draft.code" :disabled="!!draft.id" maxlength="64" placeholder="SUMMER_DRAW" /><small>仅支持大写字母、数字与下划线</small></label><label><span>活动类型</span><select v-model="draft.type" :disabled="!!draft.id"><option value="LOTTERY">抽奖活动</option><option value="REDEMPTION">兑换活动</option></select></label></div>
           <div class="field-row"><label><span>开始时间 <b>*</b></span><input v-model="draft.startsAt" type="datetime-local" /></label><label><span>结束时间</span><input v-model="draft.endsAt" type="datetime-local" /><small>留空表示长期有效</small></label></div>
           <label v-if="draft.id"><span>活动状态</span><select v-model="draft.status"><option value="DRAFT">草稿</option><option value="ACTIVE">进行中</option><option value="PAUSED">已暂停</option><option value="ENDED">已结束</option></select></label>
-          <fieldset><legend>参与规则</legend><p>规则字段修改后将创建新版本，已有参与记录继续关联原版本。</p><div class="field-row"><label><span>单次积分成本</span><input v-model.number="draft.pointsCost" type="number" min="0" :disabled="draft.type === 'REDEMPTION'" /><small>{{ draft.type === 'REDEMPTION' ? '兑换积分由具体商品决定' : '设为 0 表示免费参与' }}</small></label><label><span>每日参与上限</span><input v-model.number="draft.dailyLimit" type="number" min="1" placeholder="不限" /><small>留空表示不限次数</small></label></div>
+          <fieldset><legend>参与规则</legend><p>规则字段修改后将创建新版本，已有参与记录继续关联原版本。</p><div class="field-row"><label><span>单次积分成本</span><input v-model.number="draft.pointsCost" type="number" min="0" :disabled="draft.type === 'REDEMPTION'" /><small>{{ draft.type === 'REDEMPTION' ? '兑换积分由具体商品决定' : '设为 0 表示免费参与' }}</small></label><label v-if="draft.type === 'LOTTERY'"><span>每日参与上限</span><input v-model.number="draft.dailyLimit" type="number" min="1" placeholder="不限" /><small>留空表示不限次数</small></label></div>
             <div v-if="draft.type === 'LOTTERY'" class="rule-builder">
               <label><span>幸运奖奖品 ID</span><input v-model.number="draft.luckyPrizeId" type="number" min="1" placeholder="默认使用 NONE 类型奖品" /><small>所有候选奖品均被过滤时使用；留空则自动选择 NONE 类型奖品。</small></label>
               <div class="rule-builder-head"><div><strong>前置责任链</strong><small>从上到下执行，名单命中后会立即结束前置处理。</small></div><div><select v-model="selectedRuleType" :disabled="!availableRuleOptions.length" aria-label="待添加的规则类型"><option v-for="option in availableRuleOptions" :key="option.type" :value="option.type">{{ option.label }}</option></select><button class="add-rule" type="button" :disabled="!availableRuleOptions.length" @click="addRule">添加规则</button></div></div>

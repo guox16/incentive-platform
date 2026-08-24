@@ -81,7 +81,8 @@ public class AdminActivityService {
     IncentiveActivity activity = activityRepository.save(new IncentiveActivity(
         code, request.type(), request.name().trim(), request.startsAt(), request.endsAt()));
     ParticipationRule rule = ruleRepository.saveAndFlush(new ParticipationRule(
-        activity.getId(), 1, request.pointsCost(), request.dailyLimit(), clock.instant()));
+        activity.getId(), 1, request.pointsCost(),
+        dailyLimit(request.type(), request.dailyLimit()), clock.instant()));
     savePreDrawRules(activity, rule, request.luckyPrizeId(), preDrawRules);
     return response(activity);
   }
@@ -95,11 +96,12 @@ public class AdminActivityService {
     validateRuleSettings(activity.getType(), request.luckyPrizeId(), preDrawRules);
     ParticipationRule currentRule = latestRule(activity.getId());
     RuleSettings requestedSettings = new RuleSettings(request.luckyPrizeId(), preDrawRules);
+    Integer requestedDailyLimit = dailyLimit(activity.getType(), request.dailyLimit());
     activity.update(request.name().trim(), request.status(), request.startsAt(), request.endsAt());
-    if (ruleChanged(currentRule, request, requestedSettings)) {
+    if (ruleChanged(currentRule, request, requestedDailyLimit, requestedSettings)) {
       ParticipationRule newRule = ruleRepository.saveAndFlush(new ParticipationRule(
           activity.getId(), currentRule.getRuleVersion() + 1, request.pointsCost(),
-          request.dailyLimit(), clock.instant()));
+          requestedDailyLimit, clock.instant()));
       copyLotteryPrizes(activity, currentRule, newRule);
       savePreDrawRules(activity, newRule, request.luckyPrizeId(), preDrawRules);
     }
@@ -150,7 +152,8 @@ public class AdminActivityService {
     }
     return new AdminActivityResponse(activity.getId(), activity.getCode(), activity.getType(),
         activity.getName(), activity.getStatus(), activity.getStartsAt(), activity.getEndsAt(),
-        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(), settings.luckyPrizeId(),
+        rule.getRuleVersion(), rule.getPointsCost(), dailyLimit(activity.getType(),
+            rule.getDailyLimit()), settings.luckyPrizeId(),
         List.copyOf(responses), activity.getCreatedAt(), activity.getUpdatedAt());
   }
 
@@ -263,10 +266,14 @@ public class AdminActivityService {
   }
 
   private boolean ruleChanged(ParticipationRule currentRule, UpdateActivityRequest request,
-      RuleSettings requestedSettings) {
+      Integer requestedDailyLimit, RuleSettings requestedSettings) {
     return currentRule.getPointsCost() != request.pointsCost()
-        || !Objects.equals(currentRule.getDailyLimit(), request.dailyLimit())
+        || !Objects.equals(currentRule.getDailyLimit(), requestedDailyLimit)
         || !readRuleSettings(currentRule.getId()).equals(requestedSettings);
+  }
+
+  private Integer dailyLimit(ActivityType type, Integer requestedDailyLimit) {
+    return type == ActivityType.LOTTERY ? requestedDailyLimit : null;
   }
 
   private IncentiveBusinessException conflict(String code, String message) {

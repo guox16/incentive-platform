@@ -75,6 +75,30 @@ class AdminActivityServiceTest {
   }
 
   @Test
+  void redemptionActivityDoesNotPersistDailyLimit() {
+    when(activityRepository.existsByCode("POINTS_MALL")).thenReturn(false);
+    when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
+      IncentiveActivity activity = call.getArgument(0);
+      setId(activity, 10L);
+      return activity;
+    });
+    when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
+      ParticipationRule rule = call.getArgument(0);
+      setId(rule, 20L);
+      return rule;
+    });
+    when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(10L))
+        .thenReturn(Optional.of(rule(20L, 10L, 1, 0, null, NOW)));
+
+    service.create(new CreateActivityRequest("POINTS_MALL", "积分商城",
+        ActivityType.REDEMPTION, NOW, null, 0, 3, null, List.of()));
+
+    ArgumentCaptor<ParticipationRule> captor = ArgumentCaptor.forClass(ParticipationRule.class);
+    verify(ruleRepository).saveAndFlush(captor.capture());
+    assertThat(captor.getValue().getDailyLimit()).isNull();
+  }
+
+  @Test
   void createsNewRuleVersionWhenRuleChanges() {
     IncentiveActivity activity = activity(7L);
     ParticipationRule oldRule = rule(17L, 7L, 2, 10, 1, NOW.minusSeconds(60));

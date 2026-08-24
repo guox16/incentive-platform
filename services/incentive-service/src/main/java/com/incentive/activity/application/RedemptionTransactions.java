@@ -15,7 +15,6 @@ import com.incentive.activity.repository.RedemptionRecordRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -57,12 +56,6 @@ public class RedemptionTransactions {
     }
 
     ParticipationRule rule = activityQueryService.findRule(activity.getId(), now);
-    long usedToday = countToday(activity.getId(), userId);
-    if (rule.getDailyLimit() != null && usedToday >= rule.getDailyLimit()) {
-      throw new IncentiveBusinessException(
-          "DAILY_LIMIT_REACHED", "今日兑换次数已达上限", HttpStatus.CONFLICT);
-    }
-
     RedemptionItem item = itemRepository
         .findByIdAndActivityIdAndRuleIdAndStatus(
             itemId, activity.getId(), rule.getId(), RedemptionItem.Status.ACTIVE)
@@ -75,7 +68,7 @@ public class RedemptionTransactions {
           "REDEMPTION_ITEM_SOLD_OUT", "兑换商品活动名额已用完", HttpStatus.CONFLICT);
     }
 
-    String eligibilityResult = "{\"passed\":true,\"usedTodayBefore\":" + usedToday + "}";
+    String eligibilityResult = "{\"passed\":true}";
     return recordRepository.saveAndFlush(new RedemptionRecord(
         requestId, activity, rule, item, userId, eligibilityResult, pointBusinessId, now));
   }
@@ -99,12 +92,4 @@ public class RedemptionTransactions {
     }
   }
 
-  private long countToday(Long activityId, Long userId) {
-    LocalDate today = LocalDate.now(clock);
-    Instant from = today.atStartOfDay(clock.getZone()).toInstant();
-    Instant to = today.plusDays(1).atStartOfDay(clock.getZone()).toInstant();
-    return recordRepository
-        .countByActivityIdAndUserIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-            activityId, userId, from, to);
-  }
 }

@@ -71,7 +71,8 @@ public class ActivityQueryService {
         : List.of();
     return new ActivityDetailResponse(activity.getId(), activity.getCode(), activity.getType(),
         activity.getName(), activity.getStatus(), activity.getStartsAt(), activity.getEndsAt(),
-        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(), prizes, items);
+        rule.getRuleVersion(), rule.getPointsCost(),
+        activity.getType() == ActivityType.LOTTERY ? rule.getDailyLimit() : null, prizes, items);
   }
 
   public ParticipationRule findRule(Long activityId, Instant now) {

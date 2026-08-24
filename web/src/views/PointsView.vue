@@ -207,7 +207,7 @@ onMounted(loadPoints);
               <span>{{ checkingIn ? (checkInPending ? '正在重试积分发放' : '签到处理中') : checkInCompleted ? '积分已到账' : checkInPending ? '立即重试' : '今日签到' }}</span>
               <b v-if="!checkingIn && !checkInRecorded">+{{ checkIn?.rewardPoints ?? 10 }}</b>
             </button>
-            <p v-if="checkInPending" class="pending-reward-copy" role="status">补发会使用原签到记录，不会重复签到或重复累计天数。</p>
+            <p v-if="checkInPending" class="pending-reward-copy" role="status">无需再次签到，系统会保留本次签到记录。</p>
             <p class="streak-copy">连续签到 <strong>{{ checkIn?.currentStreak ?? 0 }}</strong> 天</p>
             <p v-if="checkInFeedback" class="check-in-message success" role="status">{{ checkInFeedback }}</p>
             <p v-if="checkInError" class="check-in-message error" role="alert">{{ checkInError }}</p>

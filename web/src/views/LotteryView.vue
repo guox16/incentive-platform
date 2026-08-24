@@ -303,12 +303,11 @@ onBeforeUnmount(() => {
       <section v-else-if="!activity" class="page-state"><strong>当前没有进行中的抽奖活动</strong><p>活动发布后会显示在这里，请稍后再来看看。</p><button type="button" @click="loadActivities">刷新活动</button></section>
 
       <template v-else>
-      <div class="activity-kicker"><span>活动服务</span><i></i><span>实时活动配置</span></div>
-      <header class="activity-heading"><div><p>进行中的抽奖活动</p><h1>{{ activity.name }}</h1><span>奖池、积分成本与参与次数均以服务端当前配置为准。</span></div><div class="balance-chip"><svg><use href="#lottery-coin"/></svg><div><small>当前可用积分</small><strong>{{ formattedBalance }}</strong></div></div></header>
+      <header class="activity-heading"><div><p>进行中的抽奖活动</p><h1>{{ activity.name }}</h1><span>奖项、参与积分和次数限制以本页展示为准。</span></div><div class="balance-chip"><svg><use href="#lottery-coin"/></svg><div><small>当前可用积分</small><strong>{{ formattedBalance }}</strong></div></div></header>
 
       <div class="lottery-layout">
         <section class="draw-counter" aria-labelledby="draw-title">
-          <div class="counter-top"><div><h2 id="draw-title">本期收获窗</h2><span>规则版本 {{ activity.ruleVersion }} · {{ dailyLimitText(activity) }}</span></div><span class="live-state"><i></i>活动进行中</span></div>
+          <div class="counter-top"><div><h2 id="draw-title">本期收获窗</h2><span>{{ dailyLimitText(activity) }}</span></div><span class="live-state"><i></i>活动进行中</span></div>
           <div v-if="activity.prizes.length" class="prize-grid" :class="{ drawing }">
             <article v-for="(prize, index) in activity.prizes" :key="prize.id" :class="['prize-cell', prizeTone(prize), { selected: !drawing && Boolean(drawResult) && index === activePrize, highlighted: drawing && index === activePrize }]">
               <svg><use href="#lottery-gift"/></svg><strong>{{ prize.name }}</strong><small>{{ prizeKind(prize.type) }}</small>
@@ -318,7 +317,7 @@ onBeforeUnmount(() => {
           <div class="draw-action"><div><span>单次参与</span><strong>{{ activity.pointsCost }} <small>积分</small></strong></div><button type="button" :disabled="drawing || balance < activity.pointsCost || !activity.prizes.length" @click="draw"><span v-if="drawing" class="button-loader"></span><span>{{ drawing ? '正在抽取结果…' : !activity.prizes.length ? '奖池尚未开放' : balance < activity.pointsCost ? '当前积分不足' : `使用 ${activity.pointsCost} 积分参与` }}</span><svg v-if="!drawing && balance >= activity.pointsCost && activity.prizes.length"><use href="#lottery-arrow"/></svg></button></div>
           <p v-if="drawError" class="action-error" role="alert">{{ drawError }}</p>
           <div v-if="drawNotice" class="action-notice" role="status"><span>{{ drawNotice }}</span><button type="button" @click="viewRecords">查看抽奖记录</button></div>
-          <p class="counter-caption">结果依据当前活动规则的 Redis 权重槽位产生，参与成功后立即扣除积分。</p>
+          <p class="counter-caption">参与成功后立即扣除积分，抽奖结果可在下方记录中查看。</p>
         </section>
 
         <aside class="activity-catalog" aria-label="活动列表">
@@ -345,11 +344,11 @@ onBeforeUnmount(() => {
           </article>
         </div>
       </section>
-      <section class="activity-footnote"><span>活动规则说明</span><p>一期仅校验活动状态、参与积分及每日参与次数。虚拟权益与积分奖励会创建待发奖记录；奖品库存与实际发放将在后续阶段接入。</p></section>
+      <section class="activity-footnote"><span>活动说明</span><p>参与前请确认所需积分和每日参与次数；抽奖完成后，可在“我的抽奖记录”中查看结果。</p></section>
       </template>
     </main>
 
-    <div v-if="resultOpen && drawResult && activity" class="result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title" @click.self="resultOpen = false"><section><button class="dialog-close" type="button" aria-label="关闭结果" @click="resultOpen = false">×</button><span class="result-mark"><svg><use href="#lottery-gift"/></svg></span><p>{{ activity.name }} · 本次参与结果</p><h2 id="result-title">{{ drawResult.prizeName }}</h2><span class="result-kind">{{ prizeKind(drawResult.prizeType) }}</span><div class="result-note"><svg><use href="#lottery-check"/></svg><span>{{ drawResult.pendingAwardCreated ? '结果已记录，奖励已进入待发奖状态。' : '参与结果已记录，本次无需创建待发奖任务。' }}</span></div><button class="dialog-confirm" type="button" @click="resultOpen = false">我知道了</button></section></div>
+    <div v-if="resultOpen && drawResult && activity" class="result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title" @click.self="resultOpen = false"><section><button class="dialog-close" type="button" aria-label="关闭结果" @click="resultOpen = false">×</button><span class="result-mark"><svg><use href="#lottery-gift"/></svg></span><p>{{ activity.name }} · 本次参与结果</p><h2 id="result-title">{{ drawResult.prizeName }}</h2><span class="result-kind">{{ prizeKind(drawResult.prizeType) }}</span><div class="result-note"><svg><use href="#lottery-check"/></svg><span>本次抽奖结果已记录。</span></div><button class="dialog-confirm" type="button" @click="resultOpen = false">我知道了</button></section></div>
   </div>
 </template>
 

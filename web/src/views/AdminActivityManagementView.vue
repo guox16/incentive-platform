@@ -5,7 +5,7 @@ import { http } from '../api/http';
 import type { ActivityStatus, AdminActivityResponse, AdminPrizePoolResponse, ApiError, CreateActivityRequest, LotteryPreDrawRule, LotteryPreDrawRuleType, PrizePoolCandidate, PrizeType, UpdateActivityRequest, UpdatePrizePoolRequest } from '../api/types';
 import AccountHeader from '../components/AccountHeader.vue';
 
-type ManageableType = 'LOTTERY' | 'REDEMPTION';
+type ManageableType = 'LOTTERY';
 type PrizeValueDraft = { prizeId: number | ''; value: number };
 type PrizePoolDraft = { prizeId: number | ''; weight: number; campaignQuota: number | null };
 type PointsTierDraft = { minimumPoints: number; multipliers: PrizeValueDraft[] };
@@ -333,7 +333,7 @@ onMounted(loadActivities);
 
       <section class="filter-bar" aria-label="活动筛选">
         <label class="search"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input v-model="keyword" aria-label="搜索活动" placeholder="搜索活动名称 / 编码" /></label>
-        <select v-model="typeFilter" aria-label="活动类型"><option value="ALL">全部活动类型</option><option value="LOTTERY">抽奖活动</option><option value="REDEMPTION">兑换活动</option></select>
+        <select v-model="typeFilter" aria-label="活动类型"><option value="ALL">全部活动类型</option><option value="LOTTERY">抽奖活动</option></select>
         <select v-model="statusFilter" aria-label="活动状态"><option value="ALL">全部状态</option><option value="DRAFT">草稿</option><option value="ACTIVE">进行中</option><option value="PAUSED">已暂停</option><option value="ENDED">已结束</option></select>
         <button class="secondary-button" type="button" @click="resetFilters">重置筛选</button>
       </section>
@@ -362,7 +362,7 @@ onMounted(loadActivities);
         <header><div><span>{{ draft.id ? '编辑活动' : '新建活动' }}</span><h2 id="activity-drawer-title">{{ draft.id ? draft.name : '创建活动与首版规则' }}</h2></div><button type="button" aria-label="关闭" @click="drawerOpen = false"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
         <div class="drawer-body">
           <label><span>活动名称 <b>*</b></span><input v-model="draft.name" maxlength="100" placeholder="例如：夏日幸运抽奖" /></label>
-          <label><span>活动类型</span><select v-model="draft.type" :disabled="!!draft.id"><option value="LOTTERY">抽奖活动</option><option value="REDEMPTION">兑换活动</option></select></label>
+          <label><span>活动类型</span><select v-model="draft.type" :disabled="!!draft.id"><option value="LOTTERY">抽奖活动</option></select></label>
           <div class="field-row"><label><span>开始时间 <b>*</b></span><input v-model="draft.startsAt" type="datetime-local" /></label><label><span>结束时间</span><input v-model="draft.endsAt" type="datetime-local" /><small>留空表示长期有效</small></label></div>
           <label v-if="draft.id"><span>活动状态</span><select v-model="draft.status"><option value="DRAFT">草稿</option><option value="ACTIVE">进行中</option><option value="PAUSED">已暂停</option><option value="ENDED">已结束</option></select></label>
           <fieldset v-if="draft.type === 'LOTTERY'" class="prize-pool-fieldset">
@@ -381,7 +381,7 @@ onMounted(loadActivities);
             </div>
             <small v-if="draft.id && !prizePoolEditable" class="pool-lock">活动已离开草稿阶段，奖池已锁定以保护历史抽奖记录。</small>
           </fieldset>
-          <fieldset><legend>参与规则</legend><p>规则字段修改后将创建新版本，已有参与记录继续关联原版本。</p><div class="field-row"><label><span>单次积分成本</span><input v-model.number="draft.pointsCost" type="number" min="0" :disabled="draft.type === 'REDEMPTION'" /><small>{{ draft.type === 'REDEMPTION' ? '兑换积分由具体商品决定' : '设为 0 表示免费参与' }}</small></label><label v-if="draft.type === 'LOTTERY'"><span>每日参与上限</span><input v-model.number="draft.dailyLimit" type="number" min="1" placeholder="不限" /><small>留空表示不限次数</small></label></div>
+          <fieldset><legend>参与规则</legend><p>规则字段修改后将创建新版本，已有参与记录继续关联原版本。</p><div class="field-row"><label><span>单次积分成本</span><input v-model.number="draft.pointsCost" type="number" min="0" /><small>设为 0 表示免费参与</small></label><label><span>每日参与上限</span><input v-model.number="draft.dailyLimit" type="number" min="1" placeholder="不限" /><small>留空表示不限次数</small></label></div>
             <div v-if="draft.type === 'LOTTERY'" class="rule-builder">
               <label><span>兜底奖品</span><select v-model.number="draft.luckyPrizeId"><option :value="null">自动选择“未中奖”奖品</option><option v-for="option in configuredPoolOptions" :key="option.prizeId" :value="option.prizeId">{{ option.name }} · {{ prizeTypeName(option.type) }}</option></select><small>所有候选奖品均不可用时发放，建议选择“未中奖”类型。</small></label>
               <div class="rule-builder-head"><div><strong>前置责任链</strong><small>从上到下执行，名单命中后会立即结束前置处理。</small></div><div><select v-model="selectedRuleType" :disabled="!availableRuleOptions.length" aria-label="待添加的规则类型"><option v-for="option in availableRuleOptions" :key="option.type" :value="option.type">{{ option.label }}</option></select><button class="add-rule" type="button" :disabled="!availableRuleOptions.length" @click="addRule">添加规则</button></div></div>

@@ -23,6 +23,8 @@ public class AwardSecurityConfiguration {
                 "/swagger-ui/**", "/swagger-ui.html").permitAll()
             .requestMatchers(HttpMethod.PATCH, "/api/v1/awards/status")
                 .hasAuthority("PRIZE_MANAGE")
+            .requestMatchers(HttpMethod.GET, "/api/v1/awards/redeemable")
+                .hasAuthority("REDEMPTION_PARTICIPATE")
             .requestMatchers("/api/v1/awards/*/inventory-adjustments",
                 "/api/v1/awards/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
             .requestMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")

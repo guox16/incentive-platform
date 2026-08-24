@@ -14,5 +14,7 @@ public record AwardResponse(
     String awardPayload,
     long totalStock,
     long availableStock,
+    boolean redemptionEnabled,
+    Long redemptionPointsPrice,
     Instant createdAt,
     Instant updatedAt) {}

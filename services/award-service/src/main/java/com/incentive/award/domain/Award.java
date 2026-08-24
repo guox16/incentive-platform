@@ -45,6 +45,12 @@ public class Award {
   @Column(name = "available_stock", nullable = false)
   private long availableStock;
 
+  @Column(name = "redemption_enabled", nullable = false)
+  private boolean redemptionEnabled;
+
+  @Column(name = "redemption_points_price")
+  private Long redemptionPointsPrice;
+
   @Version
   @Column(nullable = false)
   private long version;
@@ -104,6 +110,8 @@ public class Award {
     awardPayload = normalize(request.awardPayload());
     totalStock = request.totalStock();
     availableStock = request.availableStock();
+    redemptionEnabled = request.redemptionEnabled();
+    redemptionPointsPrice = redemptionEnabled ? request.redemptionPointsPrice() : null;
     updatedAt = now;
   }
 
@@ -120,6 +128,8 @@ public class Award {
   public String getAwardPayload() { return awardPayload; }
   public long getTotalStock() { return totalStock; }
   public long getAvailableStock() { return availableStock; }
+  public boolean isRedemptionEnabled() { return redemptionEnabled; }
+  public Long getRedemptionPointsPrice() { return redemptionPointsPrice; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

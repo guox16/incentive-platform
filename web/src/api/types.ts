@@ -25,7 +25,7 @@ export type PointTransactionResponse = {
   transactionId: number;
   businessId: number;
   userId: number;
-  type: 'CREDIT' | 'DEBIT';
+  type: "CREDIT" | "DEBIT";
   amount: number;
   balanceBefore: number;
   balanceAfter: number;
@@ -49,17 +49,17 @@ export type DailyCheckInResponse = {
   checkedInToday: boolean;
   currentStreak: number;
   rewardPoints: number;
-  rewardStatus: 'AVAILABLE' | 'PENDING' | 'AWARDED';
+  rewardStatus: "AVAILABLE" | "PENDING" | "AWARDED";
   checkInId: number | null;
   pointTransactionId: number | null;
   balanceAfter: number | null;
   signedDates: string[];
 };
 
-export type ActivityType = 'CHECK_IN' | 'LOTTERY' | 'REDEMPTION';
-export type ActivityStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
-export type PrizeType = 'VIRTUAL' | 'POINTS' | 'NONE';
-export type PrizeStatus = 'ACTIVE' | 'INACTIVE';
+export type ActivityType = "CHECK_IN" | "LOTTERY" | "REDEMPTION";
+export type ActivityStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
+export type PrizeType = "VIRTUAL" | "POINTS" | "NONE";
+export type PrizeStatus = "ACTIVE" | "INACTIVE";
 
 export type PrizeResponse = {
   id: number;
@@ -71,6 +71,8 @@ export type PrizeResponse = {
   totalStock: number;
   availableStock: number;
   awardPayload: string | null;
+  redemptionEnabled: boolean;
+  redemptionPointsPrice: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -83,6 +85,8 @@ export type AwardUpsertRequest = {
   totalStock: number;
   availableStock: number;
   awardPayload: string | null;
+  redemptionEnabled: boolean;
+  redemptionPointsPrice: number | null;
 };
 
 export type AdjustPrizeInventoryRequest = {
@@ -115,7 +119,7 @@ export type RedemptionItemResponse = {
   itemCode: string;
   prizeId: number;
   name: string;
-  type: Exclude<PrizeType, 'NONE'>;
+  type: Exclude<PrizeType, "NONE">;
   coverUrl: string | null;
   pointsPrice: number;
   campaignQuota: number | null;
@@ -133,26 +137,27 @@ export type ActivityDetailResponse = ActivitySummaryResponse & {
 
 export type LoginResponse = {
   accessToken: string;
-  tokenType: 'Bearer';
+  tokenType: "Bearer";
   expiresIn: number;
   role: UserRole;
   permissions: PermissionCode[];
   user: UserResponse;
 };
 
-export type UserRole = 'USER' | 'ADMIN' | 'SUPER_ADMIN';
+export type UserRole = "USER" | "ADMIN" | "SUPER_ADMIN";
 export type PermissionCode =
-  | 'ACCOUNT_SELF'
-  | 'POINTS_SELF'
-  | 'CHECK_IN'
-  | 'LOTTERY_PARTICIPATE'
-  | 'REDEMPTION_PARTICIPATE'
-  | 'ACTIVITY_MANAGE'
-  | 'PRIZE_MANAGE'
-  | 'INVENTORY_MANAGE'
-  | 'ROLE_MANAGE';
+  | "ACCOUNT_SELF"
+  | "POINTS_SELF"
+  | "CHECK_IN"
+  | "LOTTERY_PARTICIPATE"
+  | "REDEMPTION_PARTICIPATE"
+  | "ACTIVITY_MANAGE"
+  | "PRIZE_MANAGE"
+  | "INVENTORY_MANAGE"
+  | "ROLE_MANAGE";
 
-export type LotteryPreDrawRuleType = 'USER_LIST' | 'PRIZE_UNLOCK' | 'POINTS_WEIGHT';
+export type LotteryPreDrawRuleType =
+  "USER_LIST" | "PRIZE_UNLOCK" | "POINTS_WEIGHT";
 
 export type LotteryPreDrawRule = {
   type: LotteryPreDrawRuleType;
@@ -179,7 +184,7 @@ export type AdminActivityResponse = ActivitySummaryResponse & {
 
 export type CreateActivityRequest = {
   name: string;
-  type: Exclude<ActivityType, 'CHECK_IN'>;
+  type: Exclude<ActivityType, "CHECK_IN">;
   startsAt: string;
   endsAt: string | null;
   pointsCost: number;
@@ -188,7 +193,7 @@ export type CreateActivityRequest = {
   preDrawRules: LotteryPreDrawRule[];
 };
 
-export type UpdateActivityRequest = Omit<CreateActivityRequest, 'type'> & {
+export type UpdateActivityRequest = Omit<CreateActivityRequest, "type"> & {
   status: ActivityStatus;
 };
 
@@ -239,7 +244,7 @@ export type LotteryDrawResponse = {
   drawnAt: string;
 };
 
-export type LotteryRecordStatus = 'PROCESSING' | 'SUCCESS' | 'FAILED';
+export type LotteryRecordStatus = "PROCESSING" | "SUCCESS" | "FAILED";
 
 export type LotteryRecordResponse = {
   orderId: number;
@@ -270,7 +275,7 @@ export type RedemptionResponse = {
   userId: number;
   prizeId: number;
   prizeName: string;
-  prizeType: Exclude<PrizeType, 'NONE'>;
+  prizeType: Exclude<PrizeType, "NONE">;
   coverUrl: string | null;
   pointsCost: number;
   pointTransactionId: number;

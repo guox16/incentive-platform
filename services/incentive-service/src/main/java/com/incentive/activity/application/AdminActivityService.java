@@ -21,7 +21,6 @@ import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
 import com.incentive.activity.repository.LotteryPreDrawRuleConfigRepository;
-import com.incentive.activity.repository.RedemptionItemRepository;
 import com.incentive.activity.repository.RedemptionRecordRepository;
 import com.incentive.activity.repository.LotteryOrderRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
@@ -46,7 +45,6 @@ public class AdminActivityService {
   private final LotteryPreDrawRuleStore preDrawRuleStore;
   private final LotteryPrizeRepository lotteryPrizeRepository;
   private final LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository;
-  private final RedemptionItemRepository redemptionItemRepository;
   private final RedemptionRecordRepository redemptionRecordRepository;
   private final LotteryOrderRepository lotteryOrderRepository;
   private final LotteryPreDrawRuleChain preDrawRuleChain;
@@ -58,7 +56,6 @@ public class AdminActivityService {
       LotteryPreDrawRuleStore preDrawRuleStore,
       LotteryPrizeRepository lotteryPrizeRepository,
       LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository,
-      RedemptionItemRepository redemptionItemRepository,
       RedemptionRecordRepository redemptionRecordRepository,
       LotteryOrderRepository lotteryOrderRepository,
       LotteryPreDrawRuleChain preDrawRuleChain,
@@ -68,7 +65,6 @@ public class AdminActivityService {
     this.preDrawRuleStore = preDrawRuleStore;
     this.lotteryPrizeRepository = lotteryPrizeRepository;
     this.preDrawRuleConfigRepository = preDrawRuleConfigRepository;
-    this.redemptionItemRepository = redemptionItemRepository;
     this.redemptionRecordRepository = redemptionRecordRepository;
     this.lotteryOrderRepository = lotteryOrderRepository;
     this.preDrawRuleChain = preDrawRuleChain;
@@ -144,7 +140,6 @@ public class AdminActivityService {
     }
     preDrawRuleConfigRepository.deleteByActivityId(id);
     lotteryPrizeRepository.deleteByActivityId(id);
-    redemptionItemRepository.deleteByActivityId(id);
     ruleRepository.deleteByActivityId(id);
     activityRepository.delete(activity);
   }
@@ -293,6 +288,10 @@ public class AdminActivityService {
   }
 
   private void ensureManageable(ActivityType type) {
+    if (type == ActivityType.REDEMPTION) {
+      throw new IncentiveBusinessException("REDEMPTION_ACTIVITY_REMOVED",
+          "兑换商品请在奖品管理中配置，不再创建兑换活动", HttpStatus.BAD_REQUEST);
+    }
     if (type == ActivityType.CHECK_IN) {
       throw new IncentiveBusinessException("ACTIVITY_TYPE_NOT_MANAGEABLE",
           "签到活动请使用签到规则管理", HttpStatus.BAD_REQUEST);

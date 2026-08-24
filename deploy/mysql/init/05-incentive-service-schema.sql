@@ -152,33 +152,6 @@ CREATE TABLE IF NOT EXISTS lottery_prizes (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='抽奖活动奖品与概率配置';
 
-CREATE TABLE IF NOT EXISTS redemption_items (
-    id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '兑换商品ID',
-    activity_id           BIGINT UNSIGNED NOT NULL COMMENT '兑换活动ID',
-    rule_id               BIGINT UNSIGNED NOT NULL COMMENT '参与规则ID',
-    item_code             VARCHAR(64) NOT NULL COMMENT '活动内兑换商品编码',
-    prize_id              BIGINT UNSIGNED NOT NULL COMMENT 'award-service奖品ID，不建跨库外键',
-    prize_name_snapshot   VARCHAR(100) NOT NULL COMMENT '奖品名称快照',
-    prize_type_snapshot   VARCHAR(16) NOT NULL COMMENT '奖品类型快照',
-    cover_url_snapshot    VARCHAR(500) NULL COMMENT '奖品封面快照',
-    award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
-    points_price          BIGINT UNSIGNED NOT NULL COMMENT '兑换积分价格',
-    campaign_quota        BIGINT UNSIGNED NULL COMMENT '活动投放名额，为空表示不限；一期不扣减',
-    display_order         INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
-    eligibility_rule     JSON NULL COMMENT '商品差异化资格规则扩展',
-    status                VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE可兑换、INACTIVE下架',
-    created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
-    updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_redemption_items_activity_code (activity_id, item_code),
-    KEY idx_redemption_items_activity_status_order (activity_id, status, display_order, id),
-    CONSTRAINT fk_redemption_items_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
-    CONSTRAINT fk_redemption_items_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
-    CONSTRAINT chk_redemption_items_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS')),
-    CONSTRAINT chk_redemption_items_price CHECK (points_price > 0),
-    CONSTRAINT chk_redemption_items_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='兑换活动商品配置';
-
 -- 抽奖单先于积分调用落库，同一个用户、活动和request_id只会固定一次抽奖结果。
 CREATE TABLE IF NOT EXISTS lottery_orders (
     id                     BIGINT UNSIGNED NOT NULL COMMENT 'Snowflake抽奖单ID',
@@ -267,7 +240,7 @@ CREATE TABLE IF NOT EXISTS redemption_records (
     activity_code_snapshot VARCHAR(64) NOT NULL COMMENT '活动编码快照',
     rule_id               BIGINT UNSIGNED NOT NULL COMMENT '规则ID',
     rule_version          INT UNSIGNED NOT NULL COMMENT '规则版本快照',
-    item_id               BIGINT UNSIGNED NOT NULL COMMENT '兑换商品ID',
+    item_id               BIGINT UNSIGNED NOT NULL COMMENT '兑换商品ID快照；不再关联兑换商品配置表',
     item_code_snapshot    VARCHAR(64) NOT NULL COMMENT '商品编码快照',
     user_id               BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
     prize_id              BIGINT UNSIGNED NOT NULL COMMENT '奖品主数据ID快照',
@@ -290,7 +263,6 @@ CREATE TABLE IF NOT EXISTS redemption_records (
     KEY idx_redemption_records_activity_user_time (activity_id, user_id, created_at),
     CONSTRAINT fk_redemption_records_activity FOREIGN KEY (activity_id) REFERENCES incentive_activities (id),
     CONSTRAINT fk_redemption_records_rule FOREIGN KEY (rule_id) REFERENCES activity_participation_rules (id),
-    CONSTRAINT fk_redemption_records_item FOREIGN KEY (item_id) REFERENCES redemption_items (id),
     CONSTRAINT chk_redemption_records_type CHECK (prize_type_snapshot IN ('VIRTUAL', 'POINTS')),
     CONSTRAINT chk_redemption_records_status CHECK (status IN ('PENDING', 'COMPLETED'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='兑换记录与奖品快照';

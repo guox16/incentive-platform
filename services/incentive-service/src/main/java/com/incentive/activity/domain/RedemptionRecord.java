@@ -69,30 +69,6 @@ public class RedemptionRecord {
 
   protected RedemptionRecord() {}
 
-  public RedemptionRecord(String requestId, IncentiveActivity activity, ParticipationRule rule,
-      RedemptionItem item, Long userId, String eligibilityResult, Long pointBusinessId,
-      Instant now) {
-    this.requestId = requestId;
-    this.activityId = activity.getId();
-    this.activityCode = activity.getCode();
-    this.ruleId = rule.getId();
-    this.ruleVersion = rule.getRuleVersion();
-    this.itemId = item.getId();
-    this.itemCode = item.getItemCode();
-    this.userId = userId;
-    this.prizeId = item.getPrizeId();
-    this.prizeName = item.getPrizeName();
-    this.prizeType = item.getPrizeType();
-    this.coverUrl = item.getCoverUrl();
-    this.awardPayload = item.getAwardPayload();
-    this.pointsCost = item.getPointsPrice();
-    this.eligibilityResult = eligibilityResult;
-    this.pointBusinessId = pointBusinessId;
-    this.status = RedemptionStatus.PENDING;
-    this.createdAt = now;
-    this.updatedAt = now;
-  }
-
   public void complete(Long transactionId, long balanceAfter, Instant now) {
     if (status == RedemptionStatus.COMPLETED) return;
     this.pointTransactionId = transactionId;

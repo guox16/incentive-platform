@@ -51,6 +51,11 @@ public class AwardService {
     return response(repository.save(new Award(code, request, clock.instant())));
   }
 
+  public List<AwardResponse> listRedeemable() {
+    return repository.findByRedemptionEnabledTrueAndStatusAndAvailableStockGreaterThanOrderByIdAsc(
+        AwardStatus.ACTIVE, 0).stream().map(this::response).toList();
+  }
+
   @Transactional
   public AwardResponse update(Long id, AwardUpsertRequest request) {
     Award award = find(id);
@@ -124,7 +129,8 @@ public class AwardService {
   private AwardResponse response(Award award) {
     return new AwardResponse(award.getId(), award.getCode(), award.getName(), award.getType(),
         award.getStatus(), award.getCoverUrl(), award.getAwardPayload(), award.getTotalStock(),
-        award.getAvailableStock(), award.getCreatedAt(), award.getUpdatedAt());
+        award.getAvailableStock(), award.isRedemptionEnabled(), award.getRedemptionPointsPrice(),
+        award.getCreatedAt(), award.getUpdatedAt());
   }
 
   private String nextCode(AwardType type) {

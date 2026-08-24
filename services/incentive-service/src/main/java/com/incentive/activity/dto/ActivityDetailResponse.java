@@ -16,5 +16,4 @@ public record ActivityDetailResponse(
     int ruleVersion,
     long pointsCost,
     Integer dailyLimit,
-    List<LotteryPrizeResponse> prizes,
-    List<RedemptionItemResponse> items) {}
+    List<LotteryPrizeResponse> prizes) {}

@@ -103,7 +103,7 @@ class AwardServiceTest {
   private AwardUpsertRequest request(long totalStock, long availableStock) {
     return new AwardUpsertRequest(
         "5 元券", AwardType.VIRTUAL, AwardStatus.ACTIVE,
-        null, "{\"coupon\":\"5\"}", totalStock, availableStock);
+        null, "{\"coupon\":\"5\"}", totalStock, availableStock, false, null);
   }
 
   private void setId(Award award, Long id) {

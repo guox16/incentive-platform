@@ -22,7 +22,6 @@ import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
 import com.incentive.activity.repository.LotteryPreDrawRuleConfigRepository;
-import com.incentive.activity.repository.RedemptionItemRepository;
 import com.incentive.activity.repository.RedemptionRecordRepository;
 import com.incentive.activity.repository.LotteryOrderRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
@@ -47,7 +46,6 @@ class AdminActivityServiceTest {
   @Mock LotteryPreDrawRuleStore preDrawRuleStore;
   @Mock LotteryPrizeRepository lotteryPrizeRepository;
   @Mock LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository;
-  @Mock RedemptionItemRepository redemptionItemRepository;
   @Mock RedemptionRecordRepository redemptionRecordRepository;
   @Mock LotteryOrderRepository lotteryOrderRepository;
   @Mock LotteryPreDrawRuleChain preDrawRuleChain;
@@ -57,7 +55,7 @@ class AdminActivityServiceTest {
   @BeforeEach
   void setUp() {
     service = new AdminActivityService(activityRepository, ruleRepository, preDrawRuleStore,
-        lotteryPrizeRepository, preDrawRuleConfigRepository, redemptionItemRepository,
+        lotteryPrizeRepository, preDrawRuleConfigRepository,
         redemptionRecordRepository, lotteryOrderRepository, preDrawRuleChain, businessNumberGenerator,
         Clock.fixed(NOW, ZoneOffset.UTC));
   }
@@ -85,30 +83,6 @@ class AdminActivityServiceTest {
     assertThat(response.status()).isEqualTo(ActivityStatus.DRAFT);
     assertThat(response.ruleVersion()).isEqualTo(1);
     verify(preDrawRuleChain).validateConfiguration(List.of(), null);
-  }
-
-  @Test
-  void redemptionActivityDoesNotPersistDailyLimit() {
-    when(businessNumberGenerator.next()).thenReturn(12346L);
-    when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
-      IncentiveActivity activity = call.getArgument(0);
-      setId(activity, 10L);
-      return activity;
-    });
-    when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
-      ParticipationRule rule = call.getArgument(0);
-      setId(rule, 20L);
-      return rule;
-    });
-    when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(10L))
-        .thenReturn(Optional.of(rule(20L, 10L, 1, 0, null, NOW)));
-
-    service.create(new CreateActivityRequest("积分商城",
-        ActivityType.REDEMPTION, NOW, null, 0, 3, null, List.of()));
-
-    ArgumentCaptor<ParticipationRule> captor = ArgumentCaptor.forClass(ParticipationRule.class);
-    verify(ruleRepository).saveAndFlush(captor.capture());
-    assertThat(captor.getValue().getDailyLimit()).isNull();
   }
 
   @Test
@@ -169,7 +143,7 @@ class AdminActivityServiceTest {
   @Test
   void rejectsInvalidActivityTime() {
     assertThatThrownBy(() -> service.create(new CreateActivityRequest("错误时间",
-        ActivityType.REDEMPTION, NOW, NOW, 0, null, null, List.of())))
+        ActivityType.LOTTERY, NOW, NOW, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("结束时间必须晚于开始时间");
   }
@@ -192,7 +166,6 @@ class AdminActivityServiceTest {
 
     verify(preDrawRuleConfigRepository).deleteByActivityId(7L);
     verify(lotteryPrizeRepository).deleteByActivityId(7L);
-    verify(redemptionItemRepository).deleteByActivityId(7L);
     verify(ruleRepository).deleteByActivityId(7L);
     verify(activityRepository).delete(activity);
   }

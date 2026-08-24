@@ -17,7 +17,6 @@ TRUNCATE TABLE incentive_db.pending_awards;
 TRUNCATE TABLE incentive_db.redemption_records;
 TRUNCATE TABLE incentive_db.lottery_records;
 TRUNCATE TABLE incentive_db.lottery_orders;
-TRUNCATE TABLE incentive_db.redemption_items;
 TRUNCATE TABLE incentive_db.lottery_prizes;
 TRUNCATE TABLE incentive_db.lottery_pre_draw_rules;
 TRUNCATE TABLE incentive_db.daily_check_ins;
@@ -133,8 +132,7 @@ VALUES
      JSON_OBJECT('templateCode', 'DEBUG_COUPON_20', 'amount', 20), 100, 100),
     ('DEBUG_POINTS_100', '100调试积分', 'POINTS', 'ACTIVE', NULL,
      JSON_OBJECT('points', 100), 500, 500),
-    ('DEBUG_THANKS', '谢谢参与', 'NONE', 'ACTIVE', NULL,
-     NULL, 0, 0)
+    ('THANKS', '谢谢参与', 'NONE', 'ACTIVE', NULL, NULL, 0, 0)
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     award_type = VALUES(award_type),
@@ -152,7 +150,7 @@ VALUES
      JSON_OBJECT('templateCode', 'DEBUG_COUPON_20', 'amount', 20), 0),
     ('DEBUG_POINTS_100', '100调试积分', 'POINTS', 'ACTIVE', 500,
      JSON_OBJECT('points', 100), 0),
-    ('DEBUG_THANKS', '谢谢参与', 'NONE', 'ACTIVE', 0, NULL, 0)
+    ('THANKS', '谢谢参与', 'NONE', 'ACTIVE', 0, NULL, 0)
 ON DUPLICATE KEY UPDATE
     name = VALUES(name),
     prize_type = VALUES(prize_type),
@@ -224,7 +222,7 @@ SELECT
         ELSE 3
     END
 FROM award_db.awards AS award
-WHERE award.code IN ('DEBUG_COUPON_20', 'DEBUG_POINTS_100', 'DEBUG_THANKS')
+WHERE award.code IN ('DEBUG_COUPON_20', 'DEBUG_POINTS_100', 'THANKS')
 ON DUPLICATE KEY UPDATE
     activity_id = VALUES(activity_id),
     prize_name_snapshot = VALUES(prize_name_snapshot),
@@ -269,6 +267,20 @@ VALUES
      JSON_OBJECT('membershipType', 'VIDEO_VIP', 'days', 30), 100, 100),
     ('SHOPPING_CARD_50', '50元购物卡', 'VIRTUAL', 'ACTIVE', NULL,
      JSON_OBJECT('cardType', 'SHOPPING_CARD', 'amount', 50), 50, 50);
+
+UPDATE awards
+SET redemption_enabled = CASE code
+        WHEN 'COFFEE_COUPON' THEN 1
+        WHEN 'VIDEO_VIP_30D' THEN 1
+        WHEN 'SHOPPING_CARD_50' THEN 1
+        ELSE 0
+    END,
+    redemption_points_price = CASE code
+        WHEN 'COFFEE_COUPON' THEN 120
+        WHEN 'VIDEO_VIP_30D' THEN 300
+        WHEN 'SHOPPING_CARD_50' THEN 800
+        ELSE NULL
+    END;
 
 INSERT IGNORE INTO prizes
     (code, name, prize_type, status, available_stock, award_payload, version)
@@ -392,36 +404,6 @@ ON DUPLICATE KEY UPDATE
     enabled = VALUES(enabled),
     rule_config = VALUES(rule_config);
 
-INSERT IGNORE INTO redemption_items
-    (activity_id, rule_id, item_code, prize_id, prize_name_snapshot,
-     prize_type_snapshot, cover_url_snapshot, award_payload_snapshot,
-     points_price, campaign_quota, display_order, eligibility_rule, status)
-SELECT activity.id, rule_config.id, award.code, award.id, award.name,
-       award.award_type, award.cover_url, award.award_payload,
-       CASE award.code
-           WHEN 'COFFEE_COUPON' THEN 120
-           WHEN 'VIDEO_VIP_30D' THEN 300
-           ELSE 800
-       END,
-       CASE award.code
-           WHEN 'COFFEE_COUPON' THEN 200
-           WHEN 'VIDEO_VIP_30D' THEN 100
-           ELSE 50
-       END,
-       CASE award.code
-           WHEN 'COFFEE_COUPON' THEN 1
-           WHEN 'VIDEO_VIP_30D' THEN 2
-           ELSE 3
-       END,
-       JSON_OBJECT(), 'ACTIVE'
-FROM incentive_activities AS activity
-JOIN activity_participation_rules AS rule_config
-  ON rule_config.activity_id = activity.id
-JOIN award_db.awards AS award
-  ON award.code IN ('COFFEE_COUPON', 'VIDEO_VIP_30D', 'SHOPPING_CARD_50')
-WHERE activity.code = 'POINTS_MALL'
-  AND rule_config.rule_version = 1;
-
 -- ---------------------------------------------------------------------------
 -- 初始化结果核对
 -- ---------------------------------------------------------------------------
@@ -431,11 +413,9 @@ ORDER BY id;
 
 SELECT activity.code, activity.activity_type, activity.status,
        COUNT(DISTINCT prize.id) AS lottery_prize_count,
-       COUNT(DISTINCT item.id) AS redemption_item_count,
        COUNT(DISTINCT pre_rule.id) AS pre_draw_rule_count
 FROM incentive_db.incentive_activities AS activity
 LEFT JOIN incentive_db.lottery_prizes AS prize ON prize.activity_id = activity.id
-LEFT JOIN incentive_db.redemption_items AS item ON item.activity_id = activity.id
 LEFT JOIN incentive_db.lottery_pre_draw_rules AS pre_rule
   ON pre_rule.activity_id = activity.id
 GROUP BY activity.id, activity.code, activity.activity_type, activity.status

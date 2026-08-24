@@ -15,7 +15,9 @@ public record AwardUpsertRequest(
     @Size(max = 500) String coverUrl,
     String awardPayload,
     @PositiveOrZero long totalStock,
-    @PositiveOrZero long availableStock) {
+    @PositiveOrZero long availableStock,
+    boolean redemptionEnabled,
+    @PositiveOrZero Long redemptionPointsPrice) {
 
   @AssertTrue(message = "可用库存不能大于总库存")
   public boolean isStockValid() {
@@ -30,5 +32,11 @@ public record AwardUpsertRequest(
   @AssertTrue(message = "不能通过创建或更新接口直接设置软删除状态")
   public boolean isStatusValid() {
     return status != AwardStatus.DELETED;
+  }
+
+  @AssertTrue(message = "兑换商品必须设置大于0的积分价格，且不能是谢谢参与")
+  public boolean isRedemptionValid() {
+    return !redemptionEnabled || (type != AwardType.NONE
+        && redemptionPointsPrice != null && redemptionPointsPrice > 0);
   }
 }

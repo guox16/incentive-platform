@@ -42,6 +42,12 @@ public class AwardController {
     return service.list();
   }
 
+  @GetMapping("/redeemable")
+  @Operation(summary = "查询兑换商城展示商品")
+  public List<AwardResponse> listRedeemable() {
+    return service.listRedeemable();
+  }
+
   @GetMapping("/{id}")
   @Operation(summary = "查询奖品详情")
   public AwardResponse get(@PathVariable @Positive Long id) {

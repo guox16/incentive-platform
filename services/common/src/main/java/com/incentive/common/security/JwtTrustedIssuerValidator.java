@@ -26,8 +26,8 @@ public class JwtTrustedIssuerValidator implements OAuth2TokenValidator<Jwt> {
 
   @Override
   public OAuth2TokenValidatorResult validate(Jwt jwt) {
-    var issuer = jwt.getIssuer();
-    return issuer != null && trustedIssuers.contains(issuer.toString())
+    String issuer = jwt.getClaimAsString("iss");
+    return issuer != null && trustedIssuers.contains(issuer)
         ? OAuth2TokenValidatorResult.success()
         : OAuth2TokenValidatorResult.failure(INVALID_ISSUER);
   }

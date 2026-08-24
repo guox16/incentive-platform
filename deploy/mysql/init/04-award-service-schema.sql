@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS awards (
     cover_url         VARCHAR(500) NULL COMMENT '奖品封面地址',
     award_payload     JSON NULL COMMENT '未来发奖所需参数',
     total_stock       BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '真实库存总量',
-    available_stock   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '真实可用库存，一期只维护不扣减',
+    available_stock   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '真实可用库存，发奖成功后按幂等流水扣减',
     version           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
     created_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     updated_at        DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',

@@ -15,12 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class AwardIssuanceStateService {
   private final AwardIssuanceRepository repository;
   private final UserAwardRepository userAwardRepository;
+  private final AwardInventoryService inventoryService;
   private final Clock clock;
 
   public AwardIssuanceStateService(AwardIssuanceRepository repository,
-      UserAwardRepository userAwardRepository, Clock clock) {
+      UserAwardRepository userAwardRepository, AwardInventoryService inventoryService, Clock clock) {
     this.repository = repository;
     this.userAwardRepository = userAwardRepository;
+    this.inventoryService = inventoryService;
     this.clock = clock;
   }
 
@@ -39,6 +41,7 @@ public class AwardIssuanceStateService {
   public AwardIssuance succeed(Long id, String deliveryResultRef) {
     AwardIssuance issuance = requireForUpdate(id);
     if (issuance.getStatus() == AwardIssuanceStatus.SUCCEEDED) return issuance;
+    inventoryService.consume(issuance);
     UserAward userAward = userAwardRepository.findByIssuanceId(id)
         .orElseGet(() -> userAwardRepository.saveAndFlush(
             new UserAward(issuance, clock.instant())));

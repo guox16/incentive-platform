@@ -83,6 +83,14 @@ public class Award {
     updatedAt = now;
   }
 
+  public void consumeInventory(Instant now) {
+    if (availableStock <= 0) {
+      throw new IllegalArgumentException("可用库存不足");
+    }
+    availableStock--;
+    updatedAt = now;
+  }
+
   private void apply(AwardUpsertRequest request, Instant now) {
     name = request.name().trim();
     type = request.type();

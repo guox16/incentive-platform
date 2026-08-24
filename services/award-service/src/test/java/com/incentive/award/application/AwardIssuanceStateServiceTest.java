@@ -28,13 +28,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class AwardIssuanceStateServiceTest {
   @Mock private AwardIssuanceRepository issuanceRepository;
   @Mock private UserAwardRepository userAwardRepository;
+  @Mock private AwardInventoryService inventoryService;
   private AwardIssuanceStateService service;
   private final Instant now = Instant.parse("2026-08-22T10:00:00Z");
 
   @BeforeEach
   void setUp() {
     service = new AwardIssuanceStateService(
-        issuanceRepository, userAwardRepository, Clock.fixed(now, ZoneOffset.UTC));
+        issuanceRepository, userAwardRepository, inventoryService,
+        Clock.fixed(now, ZoneOffset.UTC));
   }
 
   @Test
@@ -50,6 +52,7 @@ class AwardIssuanceStateServiceTest {
 
     ArgumentCaptor<UserAward> captor = ArgumentCaptor.forClass(UserAward.class);
     verify(userAwardRepository).saveAndFlush(captor.capture());
+    verify(inventoryService).consume(issuance);
     assertThat(captor.getValue().getUserId()).isEqualTo(7L);
     assertThat(captor.getValue().getAwardId()).isEqualTo(101L);
     assertThat(captor.getValue().getIssuanceId()).isEqualTo(81L);

@@ -329,7 +329,7 @@ WHERE code = 'SUMMER_LOTTERY';
 
 INSERT IGNORE INTO activity_participation_rules
     (activity_id, rule_version, points_cost, daily_limit, status, effective_from)
-SELECT id, 1, 0, 5, 'ACTIVE', '2025-01-01 00:00:00.000'
+SELECT id, 1, 0, NULL, 'ACTIVE', '2025-01-01 00:00:00.000'
 FROM incentive_activities
 WHERE code = 'POINTS_MALL';
 
@@ -399,29 +399,26 @@ INSERT IGNORE INTO redemption_items
 SELECT activity.id, rule_config.id, award.code, award.id, award.name,
        award.award_type, award.cover_url, award.award_payload,
        CASE award.code
-           WHEN 'WELCOME_COUPON' THEN 50
            WHEN 'COFFEE_COUPON' THEN 120
            WHEN 'VIDEO_VIP_30D' THEN 300
            ELSE 800
        END,
        CASE award.code
-           WHEN 'WELCOME_COUPON' THEN 500
            WHEN 'COFFEE_COUPON' THEN 200
            WHEN 'VIDEO_VIP_30D' THEN 100
            ELSE 50
        END,
        CASE award.code
-           WHEN 'WELCOME_COUPON' THEN 1
-           WHEN 'COFFEE_COUPON' THEN 2
-           WHEN 'VIDEO_VIP_30D' THEN 3
-           ELSE 4
+           WHEN 'COFFEE_COUPON' THEN 1
+           WHEN 'VIDEO_VIP_30D' THEN 2
+           ELSE 3
        END,
        JSON_OBJECT(), 'ACTIVE'
 FROM incentive_activities AS activity
 JOIN activity_participation_rules AS rule_config
   ON rule_config.activity_id = activity.id
 JOIN award_db.awards AS award
-  ON award.code IN ('WELCOME_COUPON', 'COFFEE_COUPON', 'VIDEO_VIP_30D', 'SHOPPING_CARD_50')
+  ON award.code IN ('COFFEE_COUPON', 'VIDEO_VIP_30D', 'SHOPPING_CARD_50')
 WHERE activity.code = 'POINTS_MALL'
   AND rule_config.rule_version = 1;
 

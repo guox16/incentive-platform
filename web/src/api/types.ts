@@ -59,7 +59,7 @@ export type DailyCheckInResponse = {
 export type ActivityType = 'CHECK_IN' | 'LOTTERY' | 'REDEMPTION';
 export type ActivityStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
 export type PrizeType = 'VIRTUAL' | 'POINTS' | 'NONE';
-export type PrizeStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE';
+export type PrizeStatus = 'ACTIVE' | 'INACTIVE';
 
 export type PrizeResponse = {
   id: number;
@@ -67,24 +67,22 @@ export type PrizeResponse = {
   name: string;
   type: PrizeType;
   status: PrizeStatus;
+  coverUrl: string | null;
+  totalStock: number;
   availableStock: number;
   awardPayload: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export type CreatePrizeRequest = {
+export type AwardUpsertRequest = {
   code: string;
   name: string;
   type: PrizeType;
-  availableStock: number;
-  awardPayload: string | null;
-};
-
-export type UpdatePrizeRequest = {
-  name: string;
-  type: PrizeType;
   status: PrizeStatus;
+  coverUrl: string | null;
+  totalStock: number;
+  availableStock: number;
   awardPayload: string | null;
 };
 

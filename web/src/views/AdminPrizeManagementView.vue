@@ -2,11 +2,11 @@
 import axios from 'axios';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { http } from '../api/http';
-import type { AdjustPrizeInventoryRequest, ApiError, CreatePrizeRequest, PrizeResponse, PrizeStatus, PrizeType, UpdatePrizeRequest } from '../api/types';
+import type { AdjustPrizeInventoryRequest, ApiError, AwardUpsertRequest, PrizeResponse, PrizeStatus, PrizeType } from '../api/types';
 import AccountHeader from '../components/AccountHeader.vue';
 
 type Scene = 'lottery' | 'redemption';
-type Draft = { id?: number; code: string; name: string; type: PrizeType; status: PrizeStatus; availableStock: number; awardPayload: string };
+type Draft = { id?: number; code: string; name: string; type: PrizeType; status: PrizeStatus; coverUrl: string; totalStock: number; availableStock: number; awardPayload: string };
 
 const scene = ref<Scene>('lottery');
 const allPrizes = ref<PrizeResponse[]>([]);
@@ -19,7 +19,7 @@ const selected = ref<number[]>([]);
 const drawerOpen = ref(false);
 const saving = ref(false);
 const formError = ref('');
-const draft = reactive<Draft>({ code: '', name: '', type: 'VIRTUAL', status: 'DRAFT', availableStock: 0, awardPayload: '{\n  \n}' });
+const draft = reactive<Draft>({ code: '', name: '', type: 'VIRTUAL', status: 'INACTIVE', coverUrl: '', totalStock: 0, availableStock: 0, awardPayload: '{\n  \n}' });
 const inventory = reactive({ changeAmount: 0, businessNo: '', remark: '' });
 
 const scenePrizes = computed(() => scene.value === 'lottery'
@@ -40,7 +40,7 @@ function message(errorValue: unknown, fallback: string) {
   return fallback;
 }
 function typeName(type: PrizeType) { return ({ VIRTUAL: '虚拟权益', POINTS: '积分奖励', NONE: '谢谢参与' })[type]; }
-function statusName(status: PrizeStatus) { return ({ DRAFT: '草稿', ACTIVE: '已上架', INACTIVE: '已下架' })[status]; }
+function statusName(status: PrizeStatus) { return ({ ACTIVE: '已上架', INACTIVE: '已下架' })[status]; }
 function formattedDate(value: string) { return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)); }
 function resetFilters() { keyword.value = ''; statusFilter.value = 'ALL'; typeFilter.value = 'ALL'; }
 function selectScene(value: Scene) { scene.value = value; selected.value = []; resetFilters(); }
@@ -48,39 +48,44 @@ function toggleAll() { selected.value = selectedAll.value ? [] : filteredPrizes.
 
 async function loadPrizes() {
   loading.value = true; error.value = '';
-  try { allPrizes.value = (await http.get<PrizeResponse[]>('/awards/prizes')).data; }
+  try { allPrizes.value = (await http.get<PrizeResponse[]>('/awards')).data; }
   catch (cause) { error.value = message(cause, '暂时无法获取奖品列表，请稍后重试。'); }
   finally { loading.value = false; }
 }
 function openCreate() {
-  Object.assign(draft, { id: undefined, code: '', name: '', type: scene.value === 'redemption' ? 'VIRTUAL' : 'VIRTUAL', status: 'DRAFT', availableStock: 0, awardPayload: '{\n  \n}' });
+  Object.assign(draft, { id: undefined, code: '', name: '', type: 'VIRTUAL', status: 'INACTIVE', coverUrl: '', totalStock: 0, availableStock: 0, awardPayload: '{\n  \n}' });
   formError.value = ''; drawerOpen.value = true;
   Object.assign(inventory, { changeAmount: 0, businessNo: '', remark: '' });
 }
 function openEdit(item: PrizeResponse) {
-  Object.assign(draft, { id: item.id, code: item.code, name: item.name, type: item.type, status: item.status, availableStock: item.availableStock, awardPayload: item.awardPayload || '' });
+  Object.assign(draft, { id: item.id, code: item.code, name: item.name, type: item.type, status: item.status, coverUrl: item.coverUrl || '', totalStock: item.totalStock, availableStock: item.availableStock, awardPayload: item.awardPayload || '' });
   formError.value = ''; drawerOpen.value = true;
   Object.assign(inventory, { changeAmount: 0, businessNo: '', remark: '' });
 }
 async function save() {
   if (saving.value || !draft.name.trim() || (!draft.id && !draft.code.trim())) { formError.value = '请填写奖品名称与唯一编码。'; return; }
   if (draft.availableStock < 0) { formError.value = '可用库存不能小于 0。'; return; }
+  if (draft.type === 'NONE' && (draft.availableStock !== 0 || draft.totalStock !== 0)) { formError.value = '“谢谢参与”的库存必须为 0。'; return; }
   if (draft.id && inventory.changeAmount !== 0 && !inventory.businessNo.trim()) { formError.value = '调整库存时必须填写业务号。'; return; }
   try { if (draft.awardPayload.trim()) JSON.parse(draft.awardPayload); } catch { formError.value = '发奖参数必须是合法的 JSON。'; return; }
   saving.value = true; formError.value = '';
   try {
+    const body: AwardUpsertRequest = {
+      code: draft.code.trim(), name: draft.name.trim(), type: draft.type, status: draft.status,
+      coverUrl: draft.coverUrl.trim() || null, awardPayload: draft.awardPayload.trim() || null,
+      totalStock: draft.id ? draft.totalStock : Number(draft.availableStock),
+      availableStock: Number(draft.availableStock),
+    };
     if (draft.id) {
-      const body: UpdatePrizeRequest = { name: draft.name.trim(), type: draft.type, status: draft.status, awardPayload: draft.awardPayload.trim() || null };
-      await http.put(`/awards/prizes/${draft.id}`, body);
+      await http.put(`/awards/${draft.id}`, body);
       if (inventory.changeAmount !== 0) {
         const adjustment: AdjustPrizeInventoryRequest = {
           businessNo: inventory.businessNo.trim(), changeAmount: Number(inventory.changeAmount), remark: inventory.remark.trim() || null,
         };
-        await http.post(`/awards/prizes/${draft.id}/inventory-adjustments`, adjustment);
+        await http.post(`/awards/${draft.id}/inventory-adjustments`, adjustment);
       }
     } else {
-      const body: CreatePrizeRequest = { code: draft.code.trim(), name: draft.name.trim(), type: draft.type, availableStock: Number(draft.availableStock), awardPayload: draft.awardPayload.trim() || null };
-      await http.post('/awards/prizes', body);
+      await http.post('/awards', body);
     }
     drawerOpen.value = false; await loadPrizes();
   } catch (cause) { formError.value = message(cause, '保存失败，请检查填写内容后重试。'); }
@@ -91,8 +96,12 @@ async function setStatus(ids: number[], status: PrizeStatus) {
   try {
     await Promise.all(ids.map(async id => {
       const prize = allPrizes.value.find(item => item.id === id); if (!prize) return;
-      const body: UpdatePrizeRequest = { name: prize.name, type: prize.type, status, awardPayload: prize.awardPayload };
-      await http.put(`/awards/prizes/${id}`, body);
+      const body: AwardUpsertRequest = {
+        code: prize.code, name: prize.name, type: prize.type, status,
+        coverUrl: prize.coverUrl, awardPayload: prize.awardPayload,
+        totalStock: prize.totalStock, availableStock: prize.availableStock,
+      };
+      await http.put(`/awards/${id}`, body);
     }));
     selected.value = []; await loadPrizes();
   } catch (cause) { error.value = message(cause, '状态更新失败，请稍后重试。'); }
@@ -107,15 +116,15 @@ onMounted(loadPrizes);
     <main class="admin-workspace">
       <header class="page-head"><div><div class="crumb">运营管理 <i></i> 奖品管理</div><h1>奖品管理</h1><p>统一维护抽奖奖池与积分商城中可用的奖品主数据。</p></div><button class="primary-button" @click="openCreate">＋ 新建奖品</button></header>
       <section class="scene-switch" aria-label="业务场景切换"><button :class="['scene-card', { active: scene === 'lottery' }]" @click="selectScene('lottery')"><span class="scene-icon">✦</span><span><small>活动奖池</small><strong>抽奖奖品 <em>{{ lotteryCount }}</em></strong><i>用于活动奖池配置</i></span><b>›</b></button><button :class="['scene-card', { active: scene === 'redemption' }]" @click="selectScene('redemption')"><span class="scene-icon">◇</span><span><small>积分商城</small><strong>兑换商品 <em>{{ redemptionCount }}</em></strong><i>用于积分商城兑换</i></span><b>›</b></button></section>
-      <section class="filter-bar"><label class="search"><span>⌕</span><input v-model="keyword" placeholder="搜索奖品名称 / 编号" /></label><select v-model="typeFilter"><option value="ALL">全部奖品类型</option><option value="VIRTUAL">虚拟权益</option><option value="POINTS">积分奖励</option><option value="NONE">谢谢参与</option></select><select v-model="statusFilter"><option value="ALL">全部状态</option><option value="DRAFT">草稿</option><option value="ACTIVE">已上架</option><option value="INACTIVE">已下架</option></select><button class="filter-button" @click="loadPrizes">查询</button><button class="reset-button" @click="resetFilters">重置</button></section>
+      <section class="filter-bar"><label class="search"><span>⌕</span><input v-model="keyword" placeholder="搜索奖品名称 / 编号" /></label><select v-model="typeFilter"><option value="ALL">全部奖品类型</option><option value="VIRTUAL">虚拟权益</option><option value="POINTS">积分奖励</option><option value="NONE">谢谢参与</option></select><select v-model="statusFilter"><option value="ALL">全部状态</option><option value="ACTIVE">已上架</option><option value="INACTIVE">已下架</option></select><button class="filter-button" @click="loadPrizes">查询</button><button class="reset-button" @click="resetFilters">重置</button></section>
       <p v-if="error" class="notice error">{{ error }} <button @click="loadPrizes">重新加载</button></p>
       <section class="table-panel"><div class="table-toolbar"><span>已选 <strong>{{ selected.length }}</strong> 项</span><div><button :disabled="!selected.length" @click="setStatus(selected, 'ACTIVE')">批量上架</button><button :disabled="!selected.length" @click="setStatus(selected, 'INACTIVE')">批量下架</button></div></div>
         <div v-if="loading" class="state">正在同步奖品数据…</div><div v-else-if="!filteredPrizes.length" class="state"><strong>没有符合条件的奖品</strong><span>可调整筛选条件，或新建一个奖品。</span></div>
-        <table v-else><thead><tr><th><input type="checkbox" :checked="selectedAll" @change="toggleAll" /></th><th>奖品信息</th><th>奖品类型</th><th>可用库存</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody><tr v-for="item in filteredPrizes" :key="item.id"><td><input v-model="selected" type="checkbox" :value="item.id" /></td><td><div class="prize-info"><span :class="['mini-mark', item.type.toLowerCase()]">{{ item.type === 'VIRTUAL' ? '券' : item.type === 'POINTS' ? '分' : '谢' }}</span><div><strong>{{ item.name }}</strong><small>{{ item.code }}</small></div></div></td><td>{{ typeName(item.type) }}</td><td class="number">{{ item.availableStock }}</td><td><span :class="['status', item.status.toLowerCase()]">{{ statusName(item.status) }}</span></td><td class="date">{{ formattedDate(item.updatedAt) }}</td><td class="actions"><button @click="openEdit(item)">编辑</button><button v-if="item.status !== 'ACTIVE'" @click="setStatus([item.id], 'ACTIVE')">上架</button><button v-else @click="setStatus([item.id], 'INACTIVE')">下架</button></td></tr></tbody></table>
+        <table v-else><thead><tr><th><input type="checkbox" :checked="selectedAll" @change="toggleAll" /></th><th>奖品信息</th><th>奖品类型</th><th>可用 / 总库存</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody><tr v-for="item in filteredPrizes" :key="item.id"><td><input v-model="selected" type="checkbox" :value="item.id" /></td><td><div class="prize-info"><span :class="['mini-mark', item.type.toLowerCase()]">{{ item.type === 'VIRTUAL' ? '券' : item.type === 'POINTS' ? '分' : '谢' }}</span><div><strong>{{ item.name }}</strong><small>{{ item.code }}</small></div></div></td><td>{{ typeName(item.type) }}</td><td class="number">{{ item.availableStock }} / {{ item.totalStock }}</td><td><span :class="['status', item.status.toLowerCase()]">{{ statusName(item.status) }}</span></td><td class="date">{{ formattedDate(item.updatedAt) }}</td><td class="actions"><button @click="openEdit(item)">编辑</button><button v-if="item.status !== 'ACTIVE'" @click="setStatus([item.id], 'ACTIVE')">上架</button><button v-else @click="setStatus([item.id], 'INACTIVE')">下架</button></td></tr></tbody></table>
         <footer v-if="!loading && filteredPrizes.length"><span>共 {{ filteredPrizes.length }} 项</span><span>奖品状态与库存以服务端数据为准</span></footer></section>
       <p class="page-note">下架后将停止新的抽奖或兑换配置，不影响已生成的待发奖记录；当前服务未提供抽奖/兑换归属字段，卡片按奖品可用类型切换展示。</p>
     </main>
-    <div v-if="drawerOpen" class="drawer-mask" @click.self="drawerOpen = false"><aside class="drawer"><header><div><span>{{ draft.id ? '编辑奖品' : '新建奖品' }}</span><h2>{{ draft.id ? draft.name : '创建奖品主数据' }}</h2></div><button @click="drawerOpen = false">×</button></header><div class="drawer-body"><label><span>奖品名称 <b>*</b></span><input v-model="draft.name" placeholder="例如：50 元通用优惠券" /></label><label><span>奖品编码 <b>*</b></span><input v-model="draft.code" :disabled="!!draft.id" placeholder="例如：COUPON_50" /><small v-if="draft.id">创建后不可修改编码。</small></label><div class="field-row"><label><span>奖品类型</span><select v-model="draft.type"><option value="VIRTUAL">虚拟权益</option><option value="POINTS">积分奖励</option><option value="NONE">谢谢参与</option></select></label><label><span>可用库存</span><input v-model.number="draft.availableStock" type="number" min="0" :disabled="!!draft.id" /><small v-if="draft.id">库存需通过库存调整接口变更。</small></label></div><label><span>上架状态</span><select v-model="draft.status" :disabled="!draft.id"><option value="DRAFT">草稿</option><option value="ACTIVE">已上架</option><option value="INACTIVE">已下架</option></select><small v-if="!draft.id">新建奖品固定为草稿，保存后可编辑上架。</small></label><label><span>发奖参数（JSON）</span><textarea v-model="draft.awardPayload" rows="8" placeholder='{"couponTemplate":"COUPON_50"}'></textarea><small>服务端接收 JSON 字符串；“谢谢参与”可留空。</small></label><fieldset v-if="draft.id" class="inventory-field"><legend>人工库存调整</legend><p>保存时将通过库存调整接口记录一笔幂等流水。</p><div class="field-row"><label><span>调整数量</span><input v-model.number="inventory.changeAmount" type="number" /><small>正数增加，负数减少。</small></label><label><span>业务号</span><input v-model="inventory.businessNo" placeholder="例如：ADMIN-20260812-001" /><small>同一奖品重复提交不会重复调整。</small></label></div><label><span>调整备注</span><input v-model="inventory.remark" maxlength="256" placeholder="例如：月度盘点入库" /></label></fieldset><p v-if="formError" class="notice error">{{ formError }}</p></div><footer><button class="reset-button" :disabled="saving" @click="drawerOpen = false">取消</button><button class="primary-button" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存奖品' }}</button></footer></aside></div>
+    <div v-if="drawerOpen" class="drawer-mask" @click.self="drawerOpen = false"><aside class="drawer"><header><div><span>{{ draft.id ? '编辑奖品' : '新建奖品' }}</span><h2>{{ draft.id ? draft.name : '创建奖品主数据' }}</h2></div><button @click="drawerOpen = false">×</button></header><div class="drawer-body"><label><span>奖品名称 <b>*</b></span><input v-model="draft.name" placeholder="例如：50 元通用优惠券" /></label><label><span>奖品编码 <b>*</b></span><input v-model="draft.code" :disabled="!!draft.id" placeholder="例如：COUPON_50" /><small v-if="draft.id">创建后不可修改编码。</small></label><div class="field-row"><label><span>奖品类型</span><select v-model="draft.type"><option value="VIRTUAL">虚拟权益</option><option value="POINTS">积分奖励</option><option value="NONE">谢谢参与</option></select></label><label><span>{{ draft.id ? '可用 / 总库存' : '初始库存' }}</span><input v-model.number="draft.availableStock" type="number" min="0" :disabled="!!draft.id" /><small v-if="draft.id">{{ draft.availableStock }} / {{ draft.totalStock }}，库存需通过调整接口变更。</small></label></div><label><span>上架状态</span><select v-model="draft.status"><option value="ACTIVE">已上架</option><option value="INACTIVE">已下架</option></select><small v-if="!draft.id">新建奖品默认下架，可确认配置后再上架。</small></label><label><span>封面地址</span><input v-model="draft.coverUrl" maxlength="500" placeholder="https://example.com/award.png" /></label><label><span>发奖参数（JSON）</span><textarea v-model="draft.awardPayload" rows="8" placeholder='{"couponTemplate":"COUPON_50"}'></textarea><small>服务端接收 JSON 字符串；“谢谢参与”可留空。</small></label><fieldset v-if="draft.id" class="inventory-field"><legend>人工库存调整</legend><p>保存时将通过库存调整接口记录一笔幂等流水。</p><div class="field-row"><label><span>调整数量</span><input v-model.number="inventory.changeAmount" type="number" /><small>正数增加，负数减少。</small></label><label><span>业务号</span><input v-model="inventory.businessNo" placeholder="例如：ADMIN-20260812-001" /><small>同一奖品重复提交不会重复调整。</small></label></div><label><span>调整备注</span><input v-model="inventory.remark" maxlength="256" placeholder="例如：月度盘点入库" /></label></fieldset><p v-if="formError" class="notice error">{{ formError }}</p></div><footer><button class="reset-button" :disabled="saving" @click="drawerOpen = false">取消</button><button class="primary-button" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存奖品' }}</button></footer></aside></div>
   </div>
 </template>
 

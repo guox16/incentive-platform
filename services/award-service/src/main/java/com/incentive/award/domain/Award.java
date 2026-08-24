@@ -72,6 +72,17 @@ public class Award {
     updatedAt = now;
   }
 
+  public void adjustInventory(long changeAmount, Instant now) {
+    long nextTotal = Math.addExact(totalStock, changeAmount);
+    long nextAvailable = Math.addExact(availableStock, changeAmount);
+    if (nextTotal < 0 || nextAvailable < 0) {
+      throw new IllegalArgumentException("库存不能小于零");
+    }
+    totalStock = nextTotal;
+    availableStock = nextAvailable;
+    updatedAt = now;
+  }
+
   private void apply(AwardUpsertRequest request, Instant now) {
     name = request.name().trim();
     type = request.type();

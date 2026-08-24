@@ -10,6 +10,22 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:123456}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:incentive}
+    password: ${RABBITMQ_PASSWORD:123456}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 5s
   jpa:
     hibernate: { ddl-auto: update }
     open-in-view: false
@@ -40,6 +56,14 @@ lottery:
     stale-threshold: ${LOTTERY_RETRY_STALE_THRESHOLD:PT30S}
     batch-size: ${LOTTERY_RETRY_BATCH_SIZE:100}
     max-per-run: ${LOTTERY_RETRY_MAX_PER_RUN:1000}
+award:
+  dispatch:
+    batch-size: ${AWARD_DISPATCH_BATCH_SIZE:100}
+    max-per-run: ${AWARD_DISPATCH_MAX_PER_RUN:1000}
+    stale-threshold: ${AWARD_DISPATCH_STALE_THRESHOLD:PT30S}
+    failure-backoff: ${AWARD_DISPATCH_FAILURE_BACKOFF:PT30S}
+    max-retries: ${AWARD_DISPATCH_MAX_RETRIES:8}
+    confirm-timeout: ${AWARD_DISPATCH_CONFIRM_TIMEOUT:PT3S}
 security:
   jwt:
     secret: "${JWT_SECRET:development-only-change-this-jwt-secret-now}"

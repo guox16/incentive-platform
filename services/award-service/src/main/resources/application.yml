@@ -16,6 +16,30 @@ spring:
   jpa:
     hibernate: { ddl-auto: validate }
     open-in-view: false
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:incentive}
+    password: ${RABBITMQ_PASSWORD:123456}
+    publisher-confirm-type: correlated
+    listener:
+      simple:
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 5s
+clients:
+  points:
+    base-url: ${POINTS_SERVICE_URL:http://localhost:8082}
+id-generator:
+  worker-id: ${SNOWFLAKE_WORKER_ID:2}
+award:
+  messaging:
+    confirm-timeout: ${AWARD_RESULT_CONFIRM_TIMEOUT:PT3S}
 server: { port: 8084 }
 management: { endpoints: { web: { exposure: { include: health,info,metrics } } } }
 security:
@@ -23,3 +47,8 @@ security:
     secret: "${JWT_SECRET:development-only-change-this-jwt-secret-now}"
     issuer: "${JWT_ISSUER:https://incentive.local}"
     audience: "${JWT_AUDIENCE:incentive-api}"
+  internal-jwt:
+    secret: "${INTERNAL_JWT_SECRET:development-only-change-this-internal-secret}"
+    issuer: "${INTERNAL_JWT_ISSUER:award-service}"
+    audience: "${INTERNAL_JWT_AUDIENCE:points-service}"
+    token-ttl: "${INTERNAL_JWT_TTL:PT1M}"

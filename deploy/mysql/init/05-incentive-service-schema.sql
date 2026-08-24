@@ -308,6 +308,7 @@ CREATE TABLE IF NOT EXISTS pending_awards (
     status                VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING待发放、PROCESSING发放中、AWARDED已发放、FAILED失败',
     retry_count           INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '重试次数预留',
     last_error            VARCHAR(500) NULL COMMENT '最近错误',
+    result_ref            VARCHAR(128) NULL COMMENT '积分流水号或虚拟权益编号',
     awarded_at            DATETIME(3) NULL COMMENT '发放成功时间',
     created_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
     updated_at            DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',

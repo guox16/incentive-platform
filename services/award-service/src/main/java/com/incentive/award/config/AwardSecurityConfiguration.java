@@ -20,8 +20,8 @@ public class AwardSecurityConfiguration {
         .authorizeHttpRequests(requests -> requests
             .requestMatchers("/actuator/health", "/actuator/info", "/v3/api-docs/**",
                 "/swagger-ui/**", "/swagger-ui.html").permitAll()
-            .requestMatchers("/api/v1/awards/prizes/*/inventory-adjustments",
-                "/api/v1/awards/prizes/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
+            .requestMatchers("/api/v1/awards/*/inventory-adjustments",
+                "/api/v1/awards/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
             .requestMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")
             .anyRequest().denyAll())
         .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt

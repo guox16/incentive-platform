@@ -1,41 +1,5 @@
 USE award_db;
 
-CREATE TABLE IF NOT EXISTS prizes (
-    id              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    code            VARCHAR(64) NOT NULL,
-    name            VARCHAR(100) NOT NULL,
-    prize_type      ENUM('VIRTUAL', 'POINTS', 'NONE') NOT NULL,
-    status          ENUM('DRAFT', 'ACTIVE', 'INACTIVE', 'DELETED') NOT NULL DEFAULT 'DRAFT',
-    available_stock BIGINT NOT NULL DEFAULT 0,
-    award_payload   JSON NULL,
-    version         BIGINT UNSIGNED NOT NULL DEFAULT 0,
-    deleted_at      DATETIME(3) NULL,
-    created_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    updated_at      DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_prizes_code (code),
-    KEY idx_prizes_status_deleted (status, deleted_at),
-    CONSTRAINT chk_prizes_type CHECK (prize_type IN ('VIRTUAL', 'POINTS', 'NONE')),
-    CONSTRAINT chk_prizes_status CHECK (status IN ('DRAFT', 'ACTIVE', 'INACTIVE', 'DELETED')),
-    CONSTRAINT chk_prizes_stock CHECK (available_stock >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='奖品主数据';
-
-CREATE TABLE IF NOT EXISTS prize_inventory_ledgers (
-    id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    prize_id       BIGINT UNSIGNED NOT NULL,
-    business_no    VARCHAR(64) NOT NULL,
-    operation_type VARCHAR(32) NOT NULL,
-    change_amount  BIGINT NOT NULL,
-    balance_after  BIGINT NOT NULL,
-    remark         VARCHAR(256) NULL,
-    created_at     DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_prize_inventory_ledger_business_no (business_no),
-    KEY idx_prize_inventory_ledger_prize_created (prize_id, created_at),
-    CONSTRAINT fk_prize_inventory_ledger_prize FOREIGN KEY (prize_id) REFERENCES prizes (id),
-    CONSTRAINT chk_prize_inventory_ledger_balance CHECK (balance_after >= 0)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='奖品库存流水';
-
 CREATE TABLE IF NOT EXISTS awards (
     id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '奖品ID',
     code              VARCHAR(64) NOT NULL COMMENT '奖品唯一编码',
@@ -56,6 +20,64 @@ CREATE TABLE IF NOT EXISTS awards (
     CONSTRAINT chk_awards_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'DELETED')),
     CONSTRAINT chk_awards_stock CHECK (available_stock <= total_stock)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='奖品主数据与真实库存';
+
+CREATE TABLE IF NOT EXISTS award_issuances (
+    id                     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '发奖记录ID',
+    command_key            VARCHAR(64) NOT NULL COMMENT '发奖幂等号，例如LOTTERY:10001',
+    source_type            ENUM('LOTTERY', 'REDEMPTION') NOT NULL COMMENT '发奖来源',
+    source_record_id       BIGINT UNSIGNED NOT NULL COMMENT '抽奖记录ID或兑换记录ID',
+    user_id                BIGINT UNSIGNED NOT NULL COMMENT '获奖用户ID',
+    award_id               BIGINT UNSIGNED NOT NULL COMMENT '奖品ID',
+    award_name_snapshot    VARCHAR(100) NOT NULL COMMENT '发奖时的奖品名称快照',
+    award_type_snapshot    ENUM('VIRTUAL', 'POINTS') NOT NULL COMMENT '发奖时的奖品类型快照',
+    award_payload_snapshot JSON NULL COMMENT '发奖参数快照',
+    stock_no               BIGINT UNSIGNED NULL COMMENT '抽奖活动库存编号；兑换发奖为空',
+    status                 ENUM('PROCESSING', 'SUCCEEDED', 'FAILED') NOT NULL DEFAULT 'PROCESSING' COMMENT '发奖执行状态',
+    point_business_id      BIGINT UNSIGNED NULL COMMENT '积分发奖使用的稳定幂等业务号',
+    result_ref             VARCHAR(128) NULL COMMENT '积分流水号或虚拟权益编号',
+    retry_count            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '执行重试次数',
+    failure_code           VARCHAR(64) NULL COMMENT '最近失败错误码',
+    last_error             VARCHAR(500) NULL COMMENT '最近失败原因',
+    started_at             DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '首次开始发奖时间',
+    succeeded_at           DATETIME(3) NULL COMMENT '发奖成功时间',
+    created_at             DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at             DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_award_issuances_command_key (command_key),
+    UNIQUE KEY uk_award_issuances_source (source_type, source_record_id),
+    UNIQUE KEY uk_award_issuances_point_business (point_business_id),
+    KEY idx_award_issuances_status_updated (status, updated_at),
+    KEY idx_award_issuances_user_created (user_id, created_at),
+    CONSTRAINT fk_award_issuances_award FOREIGN KEY (award_id) REFERENCES awards (id),
+    CONSTRAINT chk_award_issuances_result CHECK (
+        (status = 'SUCCEEDED' AND succeeded_at IS NOT NULL AND result_ref IS NOT NULL)
+        OR status <> 'SUCCEEDED'
+    ),
+    CONSTRAINT chk_award_issuances_points_business CHECK (
+        (award_type_snapshot = 'POINTS' AND point_business_id IS NOT NULL)
+        OR (award_type_snapshot = 'VIRTUAL' AND point_business_id IS NULL)
+    )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='幂等发奖执行记录';
+
+CREATE TABLE IF NOT EXISTS user_awards (
+    id                     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户奖品ID',
+    user_id                BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    award_id               BIGINT UNSIGNED NOT NULL COMMENT '奖品ID',
+    issuance_id            BIGINT UNSIGNED NOT NULL COMMENT '发奖记录ID',
+    source_type            ENUM('LOTTERY', 'REDEMPTION') NOT NULL COMMENT '获得来源',
+    source_record_id       BIGINT UNSIGNED NOT NULL COMMENT '来源记录ID',
+    award_name_snapshot    VARCHAR(100) NOT NULL COMMENT '奖品名称快照',
+    award_type_snapshot    ENUM('VIRTUAL', 'POINTS') NOT NULL COMMENT '奖品类型快照',
+    award_payload_snapshot JSON NULL COMMENT '奖品参数快照',
+    obtained_at            DATETIME(3) NOT NULL COMMENT '获得时间',
+    created_at             DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_awards_issuance (issuance_id),
+    KEY idx_user_awards_user_obtained (user_id, obtained_at),
+    KEY idx_user_awards_award (award_id),
+    CONSTRAINT fk_user_awards_award FOREIGN KEY (award_id) REFERENCES awards (id),
+    CONSTRAINT fk_user_awards_issuance FOREIGN KEY (issuance_id) REFERENCES award_issuances (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='我的奖品测试记录';
 
 CREATE TABLE IF NOT EXISTS award_inventory_ledger (
     id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '库存流水ID',

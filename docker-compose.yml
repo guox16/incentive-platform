@@ -75,6 +75,7 @@ services:
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
       INTERNAL_JWT_SECRET: "${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET}"
+      INTERNAL_JWT_TRUSTED_ISSUERS: incentive-service,award-service
       XXL_JOB_ENABLED: "true"
       XXL_JOB_ADMIN_ADDRESSES: http://xxl-job-admin:8080
       XXL_JOB_ACCESS_TOKEN: "${XXL_JOB_ACCESS_TOKEN:?set XXL_JOB_ACCESS_TOKEN}"
@@ -99,13 +100,17 @@ services:
       POINTS_SERVICE_URL: http://points-service:8082
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
       INTERNAL_JWT_SECRET: "${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET}"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-incentive}
+      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}"
       XXL_JOB_ENABLED: "true"
       XXL_JOB_ADMIN_ADDRESSES: http://xxl-job-admin:8080
       XXL_JOB_ACCESS_TOKEN: "${XXL_JOB_ACCESS_TOKEN:?set XXL_JOB_ACCESS_TOKEN}"
       XXL_JOB_EXECUTOR_APP_NAME: incentive-lottery-service
       XXL_JOB_EXECUTOR_PORT: 9998
       XXL_JOB_LOG_PATH: /var/log/xxl-job
-    depends_on: { xxl-job-admin: { condition: service_started } }
+    depends_on: { xxl-job-admin: { condition: service_started }, rabbitmq: { condition: service_started } }
   award-service:
     build: { context: ., args: { MODULE: award-service } }
     environment:
@@ -115,7 +120,15 @@ services:
       MYSQL_USER: ${MYSQL_USER:-incentive}
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?set MYSQL_PASSWORD}"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
+      INTERNAL_JWT_SECRET: "${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET}"
+      INTERNAL_JWT_ISSUER: award-service
+      POINTS_SERVICE_URL: http://points-service:8082
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-incentive}
+      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: "${REDIS_PASSWORD:?set REDIS_PASSWORD}"
+    depends_on: { rabbitmq: { condition: service_started }, points-service: { condition: service_started } }
 volumes: { mysql-data: {} }

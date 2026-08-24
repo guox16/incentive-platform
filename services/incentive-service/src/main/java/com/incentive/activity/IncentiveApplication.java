@@ -10,7 +10,10 @@ import org.springframework.context.annotation.Bean;
 @SpringBootApplication
 public class IncentiveApplication {
   public static void main(String[] args) {
-    SpringApplication.run(IncentiveApplication.class, args);
+    SpringApplication application = new SpringApplication(IncentiveApplication.class);
+    // Temporary: use the local profile while the service runs outside Docker.
+    application.setAdditionalProfiles("local");
+    application.run(args);
   }
 
   @Bean

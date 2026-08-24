@@ -14,6 +14,7 @@ import com.incentive.activity.config.IncentiveSecurityConfiguration;
 import com.incentive.activity.domain.PrizeType;
 import com.incentive.activity.dto.LotteryDrawResponse;
 import com.incentive.activity.dto.LotteryRecordResponse;
+import com.incentive.activity.dto.LotteryRecordPageResponse;
 import com.incentive.activity.dto.LotteryRecordStatus;
 import java.time.Instant;
 import java.util.List;
@@ -77,20 +78,25 @@ class LotteryControllerTest {
 
   @Test
   void returnsCurrentUsersLotteryRecords() throws Exception {
-    when(recordQueryService.findRecentByUser(7L)).thenReturn(List.of(
+    when(recordQueryService.findByUser(7L, 1, 10)).thenReturn(new LotteryRecordPageResponse(List.of(
         new LotteryRecordResponse(
             7001L, "SUMMER_LOTTERY", "夏日抽奖", LotteryRecordStatus.PROCESSING,
-            null, null, null, 10L, DRAWN_AT, DRAWN_AT)));
+            null, null, null, 10L, DRAWN_AT, DRAWN_AT)), 1, 10, 16, 2));
 
     mockMvc.perform(get("/api/v1/activities/lotteries/orders/me")
             .with(jwt().jwt(token -> token.subject("7"))
-                .authorities(new SimpleGrantedAuthority("LOTTERY_PARTICIPATE"))))
+                .authorities(new SimpleGrantedAuthority("LOTTERY_PARTICIPATE")))
+            .queryParam("page", "1")
+            .queryParam("size", "10"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$[0].orderId").value(7001))
-        .andExpect(jsonPath("$[0].activityName").value("夏日抽奖"))
-        .andExpect(jsonPath("$[0].status").value("PROCESSING"))
-        .andExpect(jsonPath("$[0].prizeId").doesNotExist());
+        .andExpect(jsonPath("$.items[0].orderId").value(7001))
+        .andExpect(jsonPath("$.items[0].activityName").value("夏日抽奖"))
+        .andExpect(jsonPath("$.items[0].status").value("PROCESSING"))
+        .andExpect(jsonPath("$.items[0].prizeId").doesNotExist())
+        .andExpect(jsonPath("$.page").value(1))
+        .andExpect(jsonPath("$.totalElements").value(16))
+        .andExpect(jsonPath("$.totalPages").value(2));
 
-    verify(recordQueryService).findRecentByUser(7L);
+    verify(recordQueryService).findByUser(7L, 1, 10);
   }
 }

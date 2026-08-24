@@ -254,6 +254,14 @@ export type LotteryRecordResponse = {
   updatedAt: string;
 };
 
+export type LotteryRecordPageResponse = {
+  items: LotteryRecordResponse[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
 export type RedemptionResponse = {
   redemptionId: number;
   activityCode: string;

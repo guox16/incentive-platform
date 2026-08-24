@@ -1,6 +1,7 @@
 package com.incentive.points.repository;
 
 import com.incentive.points.domain.PointTransaction;
+import com.incentive.points.domain.PointTransactionType;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,4 +12,7 @@ public interface PointTransactionRepository extends JpaRepository<PointTransacti
   Optional<PointTransaction> findByBusinessId(Long businessId);
   /** 按创建时间倒序分页查询用户积分流水。 */
   Page<PointTransaction> findByUserIdOrderByCreatedAtDesc(Long userId, Pageable pageable);
+  /** 按流水类型和创建时间倒序分页查询用户积分流水。 */
+  Page<PointTransaction> findByUserIdAndTypeOrderByCreatedAtDesc(
+      Long userId, PointTransactionType type, Pageable pageable);
 }

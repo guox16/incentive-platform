@@ -170,10 +170,24 @@ class PointAccountServiceTest {
     when(transactionRepository.findByUserIdOrderByCreatedAtDesc(eq(userId), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of(transaction)));
 
-    var response = service.getTransactions(userId, 0, 20);
+    var response = service.getTransactions(userId, 0, 20, null);
 
     assertThat(response.items()).hasSize(1);
     assertThat(response.items().getFirst().businessId()).isEqualTo(request.businessId());
+  }
+
+  @Test
+  void filtersPagedLedgerByTransactionType() {
+    Long userId = 1L;
+    PointCommandRequest request = new PointCommandRequest(nextBusinessId(), userId, 10, "TASK", null);
+    PointTransaction transaction = transaction(request, PointTransactionType.CREDIT, "TASK", null);
+    when(transactionRepository.findByUserIdAndTypeOrderByCreatedAtDesc(
+        eq(userId), eq(PointTransactionType.CREDIT), any(Pageable.class)))
+        .thenReturn(new PageImpl<>(List.of(transaction)));
+
+    var response = service.getTransactions(userId, 0, 20, PointTransactionType.CREDIT);
+
+    assertThat(response.items()).hasSize(1);
   }
 
   private PointCommandRequest request(long amount, String source, String remark) {

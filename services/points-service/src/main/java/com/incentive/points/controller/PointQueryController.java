@@ -4,6 +4,7 @@ import com.incentive.points.application.PointAccountService;
 import com.incentive.common.security.JwtUserId;
 import com.incentive.points.dto.PointBalanceResponse;
 import com.incentive.points.dto.PointTransactionPageResponse;
+import com.incentive.points.domain.PointTransactionType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
@@ -38,7 +39,8 @@ public class PointQueryController {
   public PointTransactionPageResponse transactions(
       @AuthenticationPrincipal Jwt jwt,
       @RequestParam(name = "page", defaultValue = "0") @Min(0) int page,
-      @RequestParam(name = "size", defaultValue = "20") @Min(1) @Max(100) int size) {
-    return service.getTransactions(JwtUserId.from(jwt), page, size);
+      @RequestParam(name = "size", defaultValue = "20") @Min(1) @Max(100) int size,
+      @RequestParam(name = "type", required = false) PointTransactionType type) {
+    return service.getTransactions(JwtUserId.from(jwt), page, size, type);
   }
 }

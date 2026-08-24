@@ -22,6 +22,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,12 +40,17 @@ class LotteryRecordQueryServiceTest {
     successful.markResultSaved(NOW);
     successful.markSuccess(NOW);
     when(orderRepository.findByUserIdOrderByCreatedAtDesc(any(), any(Pageable.class)))
-        .thenReturn(List.of(processing, successful));
+        .thenReturn(new PageImpl<>(List.of(processing, successful), PageRequest.of(1, 2), 5));
     when(activityRepository.findAllById(List.of(1L))).thenReturn(List.of(activity()));
 
-    var records = new LotteryRecordQueryService(orderRepository, activityRepository)
-        .findRecentByUser(7L);
+    var response = new LotteryRecordQueryService(orderRepository, activityRepository)
+        .findByUser(7L, 1, 2);
+    var records = response.items();
 
+    assertThat(response.page()).isEqualTo(1);
+    assertThat(response.size()).isEqualTo(2);
+    assertThat(response.totalElements()).isEqualTo(5);
+    assertThat(response.totalPages()).isEqualTo(3);
     assertThat(records.get(0).status()).isEqualTo(LotteryRecordStatus.PROCESSING);
     assertThat(records.get(0).prizeId()).isNull();
     assertThat(records.get(1).status()).isEqualTo(LotteryRecordStatus.SUCCESS);

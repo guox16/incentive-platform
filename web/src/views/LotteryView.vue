@@ -8,6 +8,7 @@ import type {
   ApiError,
   LotteryDrawRequest,
   LotteryDrawResponse,
+  LotteryRecordPageResponse,
   LotteryRecordResponse,
   LotteryRecordStatus,
   LotteryPrizeResponse,
@@ -32,6 +33,9 @@ const records = ref<LotteryRecordResponse[]>([]);
 const recordsLoading = ref(true);
 const recordsError = ref('');
 const recordsSection = ref<HTMLElement | null>(null);
+const recordPage = ref(0);
+const recordTotalElements = ref(0);
+const recordTotalPages = ref(0);
 const activity = computed(() => activities.value.find(item => item.code === activeCode.value) ?? null);
 const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(balance.value));
 const pendingRequestKey = (activityCode: string) => `lottery:pending-request:${activityCode}`;
@@ -39,8 +43,10 @@ const DRAW_ANIMATION_MS = 3600;
 const DRAW_REQUEST_TIMEOUT_MS = 15_000;
 const HIGHLIGHT_INTERVAL_MS = 115;
 const RECORD_POLL_MS = 5000;
+const LOTTERY_RECORD_PAGE_SIZE = 10;
 let highlightTimer: number | undefined;
 let recordPollTimer: number | undefined;
+let recordRequestVersion = 0;
 
 type DrawOutcome =
   | { kind: 'success'; data: LotteryDrawResponse }
@@ -149,14 +155,30 @@ async function loadActivities() {
 async function loadRecords(showLoading = false) {
   window.clearTimeout(recordPollTimer);
   recordPollTimer = undefined;
+  const requestVersion = ++recordRequestVersion;
   if (showLoading) recordsLoading.value = true;
   recordsError.value = '';
   try {
     const previouslyProcessing = new Set(
       records.value.filter(record => record.status === 'PROCESSING').map(record => record.orderId));
-    const response = await http.get<LotteryRecordResponse[]>('/activities/lotteries/orders/me');
-    records.value = response.data;
-    if (response.data.some(record =>
+    const response = await http.get<LotteryRecordPageResponse | LotteryRecordResponse[]>(
+      '/activities/lotteries/orders/me',
+      { params: { page: recordPage.value, size: LOTTERY_RECORD_PAGE_SIZE } },
+    );
+    if (requestVersion !== recordRequestVersion) return;
+    const page = Array.isArray(response.data)
+      ? {
+          items: response.data,
+          page: 0,
+          totalElements: response.data.length,
+          totalPages: response.data.length ? 1 : 0,
+        }
+      : response.data;
+    records.value = page.items;
+    recordPage.value = page.page;
+    recordTotalElements.value = page.totalElements;
+    recordTotalPages.value = page.totalPages;
+    if (page.items.some(record =>
       previouslyProcessing.has(record.orderId) && record.status !== 'PROCESSING')) {
       try {
         const balanceResponse = await http.get<PointBalanceResponse>('/points/me/balance');
@@ -166,13 +188,26 @@ async function loadRecords(showLoading = false) {
       }
     }
   } catch (error) {
+    if (requestVersion !== recordRequestVersion) return;
     recordsError.value = getErrorMessage(error, '暂时无法获取抽奖记录');
   } finally {
+    if (requestVersion !== recordRequestVersion) return;
     recordsLoading.value = false;
     if (records.value.some(record => record.status === 'PROCESSING')) {
       recordPollTimer = window.setTimeout(() => void loadRecords(), RECORD_POLL_MS);
     }
   }
+}
+
+function changeRecordPage(page: number) {
+  if (recordsLoading.value || page < 0 || page >= recordTotalPages.value) return;
+  recordPage.value = page;
+  void loadRecords(true);
+}
+
+function refreshLatestRecords() {
+  recordPage.value = 0;
+  void loadRecords();
 }
 
 function viewRecords() {
@@ -270,7 +305,7 @@ async function draw() {
   }
   confirmingResult.value = false;
   drawing.value = false;
-  void loadRecords();
+  refreshLatestRecords();
 }
 
 onMounted(() => {
@@ -348,6 +383,10 @@ onBeforeUnmount(() => {
             <span :class="['record-badge', record.status.toLowerCase()]">{{ recordStatusText(record.status) }}</span>
           </article>
         </div>
+        <nav v-if="recordTotalElements" class="records-pagination" aria-label="抽奖记录分页">
+          <span>共 {{ recordTotalElements }} 条 · 第 {{ recordPage + 1 }} / {{ recordTotalPages }} 页</span>
+          <div><button type="button" :disabled="recordsLoading || recordPage === 0" @click="changeRecordPage(recordPage - 1)">上一页</button><button type="button" :disabled="recordsLoading || recordPage + 1 >= recordTotalPages" @click="changeRecordPage(recordPage + 1)">下一页</button></div>
+        </nav>
       </section>
       <section class="activity-footnote"><span>活动说明</span><p>参与前请确认所需积分和每日参与次数；抽奖完成后，可在“我的抽奖记录”中查看结果。</p></section>
       </template>
@@ -571,6 +610,37 @@ onBeforeUnmount(() => {
 
 .records-error {
   color: #a23843;
+}
+
+.records-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.records-pagination > div {
+  display: flex;
+  gap: 8px;
+}
+
+.records-pagination button {
+  min-height: 34px;
+  padding: 0 13px;
+  color: var(--blue);
+  background: #e2ebfa;
+  border: 0;
+  border-radius: 9px;
+  font-weight: 700;
+}
+
+.records-pagination button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
 }
 
 @keyframes record-pulse {

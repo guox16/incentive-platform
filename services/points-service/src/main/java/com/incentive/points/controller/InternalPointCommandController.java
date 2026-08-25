@@ -58,21 +58,21 @@ public class InternalPointCommandController {
   /** 确认预占并生成正式扣减流水。 */
   @PostMapping("/reservations/{businessId}/confirm")
   @Operation(summary = "确认积分预占")
-  public PointReservationResponse confirm(@PathVariable Long businessId) {
+  public PointReservationResponse confirm(@PathVariable("businessId") Long businessId) {
     return reservationService.confirm(businessId);
   }
 
   /** 主动取消预占并立即退回积分。 */
   @PostMapping("/reservations/{businessId}/cancel")
   @Operation(summary = "取消积分预占")
-  public PointReservationResponse cancel(@PathVariable Long businessId) {
+  public PointReservationResponse cancel(@PathVariable("businessId") Long businessId) {
     return reservationService.cancel(businessId);
   }
 
   /** 查询积分预占当前状态。 */
   @GetMapping("/reservations/{businessId}")
   @Operation(summary = "查询积分预占")
-  public PointReservationResponse getReservation(@PathVariable Long businessId) {
+  public PointReservationResponse getReservation(@PathVariable("businessId") Long businessId) {
     return reservationService.get(businessId);
   }
 }

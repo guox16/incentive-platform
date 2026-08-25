@@ -8,4 +8,6 @@ public interface LotteryPreDrawRuleConfigRepository
     extends JpaRepository<LotteryPreDrawRuleConfig, Long> {
   List<LotteryPreDrawRuleConfig> findByParticipationRuleIdOrderByExecutionOrderAscIdAsc(
       Long participationRuleId);
+
+  void deleteByActivityId(Long activityId);
 }

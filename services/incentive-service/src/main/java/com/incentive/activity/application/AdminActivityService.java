@@ -16,15 +16,20 @@ import com.incentive.activity.dto.CreateActivityRequest;
 import com.incentive.activity.dto.LotteryPreDrawRuleRequest;
 import com.incentive.activity.dto.LotteryPreDrawRuleResponse;
 import com.incentive.activity.dto.UpdateActivityRequest;
+import com.incentive.activity.infrastructure.BusinessNumberGenerator;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
+import com.incentive.activity.repository.LotteryPreDrawRuleConfigRepository;
+import com.incentive.activity.repository.RedemptionRecordRepository;
+import com.incentive.activity.repository.LotteryOrderRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.data.domain.Sort;
@@ -39,19 +44,31 @@ public class AdminActivityService {
   private final ParticipationRuleRepository ruleRepository;
   private final LotteryPreDrawRuleStore preDrawRuleStore;
   private final LotteryPrizeRepository lotteryPrizeRepository;
+  private final LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository;
+  private final RedemptionRecordRepository redemptionRecordRepository;
+  private final LotteryOrderRepository lotteryOrderRepository;
   private final LotteryPreDrawRuleChain preDrawRuleChain;
+  private final BusinessNumberGenerator businessNumberGenerator;
   private final Clock clock;
 
   public AdminActivityService(IncentiveActivityRepository activityRepository,
       ParticipationRuleRepository ruleRepository,
       LotteryPreDrawRuleStore preDrawRuleStore,
       LotteryPrizeRepository lotteryPrizeRepository,
-      LotteryPreDrawRuleChain preDrawRuleChain, Clock clock) {
+      LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository,
+      RedemptionRecordRepository redemptionRecordRepository,
+      LotteryOrderRepository lotteryOrderRepository,
+      LotteryPreDrawRuleChain preDrawRuleChain,
+      BusinessNumberGenerator businessNumberGenerator, Clock clock) {
     this.activityRepository = activityRepository;
     this.ruleRepository = ruleRepository;
     this.preDrawRuleStore = preDrawRuleStore;
     this.lotteryPrizeRepository = lotteryPrizeRepository;
+    this.preDrawRuleConfigRepository = preDrawRuleConfigRepository;
+    this.redemptionRecordRepository = redemptionRecordRepository;
+    this.lotteryOrderRepository = lotteryOrderRepository;
     this.preDrawRuleChain = preDrawRuleChain;
+    this.businessNumberGenerator = businessNumberGenerator;
     this.clock = clock;
   }
 
@@ -74,14 +91,12 @@ public class AdminActivityService {
     validateTime(request.startsAt(), request.endsAt());
     List<LotteryPreDrawRuleRequest> preDrawRules = rulesOrEmpty(request.preDrawRules());
     validateRuleSettings(request.type(), request.luckyPrizeId(), preDrawRules);
-    String code = request.code().trim();
-    if (activityRepository.existsByCode(code)) {
-      throw conflict("ACTIVITY_CODE_ALREADY_EXISTS", "活动编码已存在");
-    }
+    String code = nextCode(request.type());
     IncentiveActivity activity = activityRepository.save(new IncentiveActivity(
         code, request.type(), request.name().trim(), request.startsAt(), request.endsAt()));
     ParticipationRule rule = ruleRepository.saveAndFlush(new ParticipationRule(
-        activity.getId(), 1, request.pointsCost(), request.dailyLimit(), clock.instant()));
+        activity.getId(), 1, request.pointsCost(),
+        dailyLimit(request.type(), request.dailyLimit()), clock.instant()));
     savePreDrawRules(activity, rule, request.luckyPrizeId(), preDrawRules);
     return response(activity);
   }
@@ -95,15 +110,38 @@ public class AdminActivityService {
     validateRuleSettings(activity.getType(), request.luckyPrizeId(), preDrawRules);
     ParticipationRule currentRule = latestRule(activity.getId());
     RuleSettings requestedSettings = new RuleSettings(request.luckyPrizeId(), preDrawRules);
+    Integer requestedDailyLimit = dailyLimit(activity.getType(), request.dailyLimit());
+    if (activity.getType() == ActivityType.LOTTERY && request.status() == ActivityStatus.ACTIVE
+        && lotteryPrizeRepository.findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(
+            activity.getId(), currentRule.getId()).isEmpty()) {
+      throw conflict("PRIZE_POOL_EMPTY", "启用抽奖活动前请先配置奖池");
+    }
     activity.update(request.name().trim(), request.status(), request.startsAt(), request.endsAt());
-    if (ruleChanged(currentRule, request, requestedSettings)) {
+    if (ruleChanged(currentRule, request, requestedDailyLimit, requestedSettings)) {
       ParticipationRule newRule = ruleRepository.saveAndFlush(new ParticipationRule(
           activity.getId(), currentRule.getRuleVersion() + 1, request.pointsCost(),
-          request.dailyLimit(), clock.instant()));
+          requestedDailyLimit, clock.instant()));
       copyLotteryPrizes(activity, currentRule, newRule);
       savePreDrawRules(activity, newRule, request.luckyPrizeId(), preDrawRules);
     }
     return response(activity);
+  }
+
+  @Transactional
+  public void delete(Long id) {
+    IncentiveActivity activity = find(id);
+    ensureManageable(activity.getType());
+    if (activity.getStatus() != ActivityStatus.ENDED) {
+      throw conflict("ACTIVITY_NOT_ENDED", "请先结束活动，再执行删除操作");
+    }
+    if (lotteryOrderRepository.countByActivityId(id) > 0
+        || redemptionRecordRepository.countByActivityId(id) > 0) {
+      throw conflict("ACTIVITY_HAS_PARTICIPATION", "已有参与记录的活动不能删除");
+    }
+    preDrawRuleConfigRepository.deleteByActivityId(id);
+    lotteryPrizeRepository.deleteByActivityId(id);
+    ruleRepository.deleteByActivityId(id);
+    activityRepository.delete(activity);
   }
 
   private void copyLotteryPrizes(IncentiveActivity activity, ParticipationRule currentRule,
@@ -150,7 +188,8 @@ public class AdminActivityService {
     }
     return new AdminActivityResponse(activity.getId(), activity.getCode(), activity.getType(),
         activity.getName(), activity.getStatus(), activity.getStartsAt(), activity.getEndsAt(),
-        rule.getRuleVersion(), rule.getPointsCost(), rule.getDailyLimit(), settings.luckyPrizeId(),
+        rule.getRuleVersion(), rule.getPointsCost(), dailyLimit(activity.getType(),
+            rule.getDailyLimit()), settings.luckyPrizeId(),
         List.copyOf(responses), activity.getCreatedAt(), activity.getUpdatedAt());
   }
 
@@ -249,6 +288,10 @@ public class AdminActivityService {
   }
 
   private void ensureManageable(ActivityType type) {
+    if (type == ActivityType.REDEMPTION) {
+      throw new IncentiveBusinessException("REDEMPTION_ACTIVITY_REMOVED",
+          "兑换商品请在奖品管理中配置，不再创建兑换活动", HttpStatus.BAD_REQUEST);
+    }
     if (type == ActivityType.CHECK_IN) {
       throw new IncentiveBusinessException("ACTIVITY_TYPE_NOT_MANAGEABLE",
           "签到活动请使用签到规则管理", HttpStatus.BAD_REQUEST);
@@ -263,10 +306,19 @@ public class AdminActivityService {
   }
 
   private boolean ruleChanged(ParticipationRule currentRule, UpdateActivityRequest request,
-      RuleSettings requestedSettings) {
+      Integer requestedDailyLimit, RuleSettings requestedSettings) {
     return currentRule.getPointsCost() != request.pointsCost()
-        || !Objects.equals(currentRule.getDailyLimit(), request.dailyLimit())
+        || !Objects.equals(currentRule.getDailyLimit(), requestedDailyLimit)
         || !readRuleSettings(currentRule.getId()).equals(requestedSettings);
+  }
+
+  private Integer dailyLimit(ActivityType type, Integer requestedDailyLimit) {
+    return type == ActivityType.LOTTERY ? requestedDailyLimit : null;
+  }
+
+  private String nextCode(ActivityType type) {
+    return type.name() + "_"
+        + Long.toUnsignedString(businessNumberGenerator.next(), 36).toUpperCase(Locale.ROOT);
   }
 
   private IncentiveBusinessException conflict(String code, String message) {

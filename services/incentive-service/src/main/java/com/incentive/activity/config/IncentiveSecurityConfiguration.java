@@ -23,7 +23,6 @@ public class IncentiveSecurityConfiguration {
             .requestMatchers("/api/v1/activities/admin/**").hasAuthority("ACTIVITY_MANAGE")
             .requestMatchers("/api/v1/activities/check-ins/me/**").hasAuthority("CHECK_IN")
             .requestMatchers("/api/v1/activities/lotteries/**").hasAuthority("LOTTERY_PARTICIPATE")
-            .requestMatchers("/api/v1/activities/redemptions/**").hasAuthority("REDEMPTION_PARTICIPATE")
             .requestMatchers("/api/v1/activities/**").authenticated()
             .anyRequest().denyAll())
         .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt

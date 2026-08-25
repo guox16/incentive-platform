@@ -8,6 +8,7 @@ import type {
   ApiError,
   LotteryDrawRequest,
   LotteryDrawResponse,
+  LotteryRecordPageResponse,
   LotteryRecordResponse,
   LotteryRecordStatus,
   LotteryPrizeResponse,
@@ -24,6 +25,7 @@ const loadError = ref('');
 const drawing = ref(false);
 const drawError = ref('');
 const drawNotice = ref('');
+const confirmingResult = ref(false);
 const resultOpen = ref(false);
 const activePrize = ref(0);
 const drawResult = ref<LotteryDrawResponse | null>(null);
@@ -31,14 +33,20 @@ const records = ref<LotteryRecordResponse[]>([]);
 const recordsLoading = ref(true);
 const recordsError = ref('');
 const recordsSection = ref<HTMLElement | null>(null);
+const recordPage = ref(0);
+const recordTotalElements = ref(0);
+const recordTotalPages = ref(0);
 const activity = computed(() => activities.value.find(item => item.code === activeCode.value) ?? null);
 const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(balance.value));
 const pendingRequestKey = (activityCode: string) => `lottery:pending-request:${activityCode}`;
 const DRAW_ANIMATION_MS = 3600;
+const DRAW_REQUEST_TIMEOUT_MS = 15_000;
 const HIGHLIGHT_INTERVAL_MS = 115;
 const RECORD_POLL_MS = 5000;
+const LOTTERY_RECORD_PAGE_SIZE = 10;
 let highlightTimer: number | undefined;
 let recordPollTimer: number | undefined;
+let recordRequestVersion = 0;
 
 type DrawOutcome =
   | { kind: 'success'; data: LotteryDrawResponse }
@@ -147,14 +155,30 @@ async function loadActivities() {
 async function loadRecords(showLoading = false) {
   window.clearTimeout(recordPollTimer);
   recordPollTimer = undefined;
+  const requestVersion = ++recordRequestVersion;
   if (showLoading) recordsLoading.value = true;
   recordsError.value = '';
   try {
     const previouslyProcessing = new Set(
       records.value.filter(record => record.status === 'PROCESSING').map(record => record.orderId));
-    const response = await http.get<LotteryRecordResponse[]>('/activities/lotteries/orders/me');
-    records.value = response.data;
-    if (response.data.some(record =>
+    const response = await http.get<LotteryRecordPageResponse | LotteryRecordResponse[]>(
+      '/activities/lotteries/orders/me',
+      { params: { page: recordPage.value, size: LOTTERY_RECORD_PAGE_SIZE } },
+    );
+    if (requestVersion !== recordRequestVersion) return;
+    const page = Array.isArray(response.data)
+      ? {
+          items: response.data,
+          page: 0,
+          totalElements: response.data.length,
+          totalPages: response.data.length ? 1 : 0,
+        }
+      : response.data;
+    records.value = page.items;
+    recordPage.value = page.page;
+    recordTotalElements.value = page.totalElements;
+    recordTotalPages.value = page.totalPages;
+    if (page.items.some(record =>
       previouslyProcessing.has(record.orderId) && record.status !== 'PROCESSING')) {
       try {
         const balanceResponse = await http.get<PointBalanceResponse>('/points/me/balance');
@@ -164,13 +188,26 @@ async function loadRecords(showLoading = false) {
       }
     }
   } catch (error) {
+    if (requestVersion !== recordRequestVersion) return;
     recordsError.value = getErrorMessage(error, '暂时无法获取抽奖记录');
   } finally {
+    if (requestVersion !== recordRequestVersion) return;
     recordsLoading.value = false;
     if (records.value.some(record => record.status === 'PROCESSING')) {
       recordPollTimer = window.setTimeout(() => void loadRecords(), RECORD_POLL_MS);
     }
   }
+}
+
+function changeRecordPage(page: number) {
+  if (recordsLoading.value || page < 0 || page >= recordTotalPages.value) return;
+  recordPage.value = page;
+  void loadRecords(true);
+}
+
+function refreshLatestRecords() {
+  recordPage.value = 0;
+  void loadRecords();
 }
 
 function viewRecords() {
@@ -198,16 +235,17 @@ function outcomeUnknown(error: unknown) {
   return axios.isAxiosError(error) && !error.response;
 }
 
-async function handleLateOutcome(
-  outcome: Exclude<DrawOutcome, { kind: 'deadline' }>, activityCode: string,
+function applyDrawSuccess(
+  result: LotteryDrawResponse, selectedActivity: ActivityDetailResponse,
 ) {
-  if (outcome.kind === 'success') {
-    clearRequestId(activityCode);
-    balance.value = outcome.data.balanceAfter;
-  } else if (!outcomeUnknown(outcome.error) && !isPendingError(outcome.error)) {
-    clearRequestId(activityCode);
-  }
-  await loadRecords();
+  clearRequestId(selectedActivity.code);
+  drawResult.value = result;
+  balance.value = result.balanceAfter;
+  drawNotice.value = '';
+  const prizeIndex = selectedActivity.prizes.findIndex(
+    prize => prize.prizeId === result.prizeId);
+  stopPrizeHighlight(prizeIndex < 0 ? 0 : prizeIndex);
+  resultOpen.value = true;
 }
 
 async function draw() {
@@ -216,6 +254,7 @@ async function draw() {
   drawing.value = true;
   drawError.value = '';
   drawNotice.value = '';
+  confirmingResult.value = false;
   drawResult.value = null;
   resultOpen.value = false;
   const selectedActivity = activity.value;
@@ -226,46 +265,47 @@ async function draw() {
     .post<LotteryDrawResponse>(
       `/activities/lotteries/${selectedActivity.code}/draw`,
       { requestId } satisfies LotteryDrawRequest,
+      { timeout: DRAW_REQUEST_TIMEOUT_MS },
     )
     .then(response => ({ kind: 'success' as const, data: response.data }))
     .catch(error => ({ kind: 'error' as const, error }));
-  const outcome = await Promise.race<DrawOutcome>([
+  let outcome = await Promise.race<DrawOutcome>([
     requestOutcome,
     wait(DRAW_ANIMATION_MS).then(() => ({ kind: 'deadline' as const })),
   ]);
+  let delayed = false;
 
   if (outcome.kind === 'deadline') {
+    delayed = true;
     stopPrizeHighlight();
-    drawing.value = false;
-    drawNotice.value = '本次结果正在处理中，请稍后在抽奖记录中查看。';
-    void loadRecords();
-    void requestOutcome.then(lateOutcome =>
-      handleLateOutcome(lateOutcome, selectedActivity.code));
-    return;
+    confirmingResult.value = true;
+    drawNotice.value = '抽奖请求已提交，正在确认最终结果…';
+    outcome = await requestOutcome;
+  } else {
+    await wait(Math.max(0, DRAW_ANIMATION_MS - (Date.now() - startedAt)));
   }
 
-  await wait(Math.max(0, DRAW_ANIMATION_MS - (Date.now() - startedAt)));
   if (outcome.kind === 'success') {
-    clearRequestId(selectedActivity.code);
-    drawResult.value = outcome.data;
-    balance.value = outcome.data.balanceAfter;
-    const prizeIndex = selectedActivity.prizes.findIndex(
-      prize => prize.prizeId === outcome.data.prizeId);
-    stopPrizeHighlight(prizeIndex < 0 ? 0 : prizeIndex);
-    resultOpen.value = true;
+    applyDrawSuccess(outcome.data, selectedActivity);
   } else {
     stopPrizeHighlight();
+    drawNotice.value = '';
     if (isPendingError(outcome.error)) {
       drawNotice.value = '本次结果正在处理中，请稍后在抽奖记录中查看。';
     } else if (outcomeUnknown(outcome.error)) {
-      drawError.value = '网络开了个小差，请再试一次。';
+      if (delayed) {
+        drawNotice.value = '暂时未收到最终结果，请稍后在抽奖记录中查看。';
+      } else {
+        drawError.value = '网络开了个小差，请再试一次。';
+      }
     } else {
       clearRequestId(selectedActivity.code);
       drawError.value = getErrorMessage(outcome.error, '本次抽奖未完成，请稍后重试');
     }
   }
+  confirmingResult.value = false;
   drawing.value = false;
-  void loadRecords();
+  refreshLatestRecords();
 }
 
 onMounted(() => {
@@ -303,22 +343,21 @@ onBeforeUnmount(() => {
       <section v-else-if="!activity" class="page-state"><strong>当前没有进行中的抽奖活动</strong><p>活动发布后会显示在这里，请稍后再来看看。</p><button type="button" @click="loadActivities">刷新活动</button></section>
 
       <template v-else>
-      <div class="activity-kicker"><span>活动服务</span><i></i><span>实时活动配置</span></div>
-      <header class="activity-heading"><div><p>进行中的抽奖活动</p><h1>{{ activity.name }}</h1><span>奖池、积分成本与参与次数均以服务端当前配置为准。</span></div><div class="balance-chip"><svg><use href="#lottery-coin"/></svg><div><small>当前可用积分</small><strong>{{ formattedBalance }}</strong></div></div></header>
+      <header class="activity-heading"><div><p>进行中的抽奖活动</p><h1>{{ activity.name }}</h1><span>奖项、参与积分和次数限制以本页展示为准。</span></div><div class="balance-chip"><svg><use href="#lottery-coin"/></svg><div><small>当前可用积分</small><strong>{{ formattedBalance }}</strong></div></div></header>
 
       <div class="lottery-layout">
         <section class="draw-counter" aria-labelledby="draw-title">
-          <div class="counter-top"><div><h2 id="draw-title">本期收获窗</h2><span>规则版本 {{ activity.ruleVersion }} · {{ dailyLimitText(activity) }}</span></div><span class="live-state"><i></i>活动进行中</span></div>
+          <div class="counter-top"><div><h2 id="draw-title">本期收获窗</h2><span>{{ dailyLimitText(activity) }}</span></div><span class="live-state"><i></i>活动进行中</span></div>
           <div v-if="activity.prizes.length" class="prize-grid" :class="{ drawing }">
             <article v-for="(prize, index) in activity.prizes" :key="prize.id" :class="['prize-cell', prizeTone(prize), { selected: !drawing && Boolean(drawResult) && index === activePrize, highlighted: drawing && index === activePrize }]">
               <svg><use href="#lottery-gift"/></svg><strong>{{ prize.name }}</strong><small>{{ prizeKind(prize.type) }}</small>
             </article>
           </div>
           <div v-else class="empty-pool"><strong>奖池尚未配置</strong><span>请等待活动方完成奖品配置后再参与。</span></div>
-          <div class="draw-action"><div><span>单次参与</span><strong>{{ activity.pointsCost }} <small>积分</small></strong></div><button type="button" :disabled="drawing || balance < activity.pointsCost || !activity.prizes.length" @click="draw"><span v-if="drawing" class="button-loader"></span><span>{{ drawing ? '正在抽取结果…' : !activity.prizes.length ? '奖池尚未开放' : balance < activity.pointsCost ? '当前积分不足' : `使用 ${activity.pointsCost} 积分参与` }}</span><svg v-if="!drawing && balance >= activity.pointsCost && activity.prizes.length"><use href="#lottery-arrow"/></svg></button></div>
+          <div class="draw-action"><div><span>单次参与</span><strong>{{ activity.pointsCost }} <small>积分</small></strong></div><button type="button" :disabled="drawing || balance < activity.pointsCost || !activity.prizes.length" @click="draw"><span v-if="drawing" class="button-loader"></span><span>{{ drawing ? confirmingResult ? '正在确认结果…' : '正在抽取结果…' : !activity.prizes.length ? '奖池尚未开放' : balance < activity.pointsCost ? '当前积分不足' : `使用 ${activity.pointsCost} 积分参与` }}</span><svg v-if="!drawing && balance >= activity.pointsCost && activity.prizes.length"><use href="#lottery-arrow"/></svg></button></div>
           <p v-if="drawError" class="action-error" role="alert">{{ drawError }}</p>
           <div v-if="drawNotice" class="action-notice" role="status"><span>{{ drawNotice }}</span><button type="button" @click="viewRecords">查看抽奖记录</button></div>
-          <p class="counter-caption">结果依据当前活动规则的 Redis 权重槽位产生，参与成功后立即扣除积分。</p>
+          <p class="counter-caption">参与成功后立即扣除积分，抽奖结果可在下方记录中查看。</p>
         </section>
 
         <aside class="activity-catalog" aria-label="活动列表">
@@ -344,12 +383,16 @@ onBeforeUnmount(() => {
             <span :class="['record-badge', record.status.toLowerCase()]">{{ recordStatusText(record.status) }}</span>
           </article>
         </div>
+        <nav v-if="recordTotalElements" class="records-pagination" aria-label="抽奖记录分页">
+          <span>共 {{ recordTotalElements }} 条 · 第 {{ recordPage + 1 }} / {{ recordTotalPages }} 页</span>
+          <div><button type="button" :disabled="recordsLoading || recordPage === 0" @click="changeRecordPage(recordPage - 1)">上一页</button><button type="button" :disabled="recordsLoading || recordPage + 1 >= recordTotalPages" @click="changeRecordPage(recordPage + 1)">下一页</button></div>
+        </nav>
       </section>
-      <section class="activity-footnote"><span>活动规则说明</span><p>一期仅校验活动状态、参与积分及每日参与次数。虚拟权益与积分奖励会创建待发奖记录；奖品库存与实际发放将在后续阶段接入。</p></section>
+      <section class="activity-footnote"><span>活动说明</span><p>参与前请确认所需积分和每日参与次数；抽奖完成后，可在“我的抽奖记录”中查看结果。</p></section>
       </template>
     </main>
 
-    <div v-if="resultOpen && drawResult && activity" class="result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title" @click.self="resultOpen = false"><section><button class="dialog-close" type="button" aria-label="关闭结果" @click="resultOpen = false">×</button><span class="result-mark"><svg><use href="#lottery-gift"/></svg></span><p>{{ activity.name }} · 本次参与结果</p><h2 id="result-title">{{ drawResult.prizeName }}</h2><span class="result-kind">{{ prizeKind(drawResult.prizeType) }}</span><div class="result-note"><svg><use href="#lottery-check"/></svg><span>{{ drawResult.pendingAwardCreated ? '结果已记录，奖励已进入待发奖状态。' : '参与结果已记录，本次无需创建待发奖任务。' }}</span></div><button class="dialog-confirm" type="button" @click="resultOpen = false">我知道了</button></section></div>
+    <div v-if="resultOpen && drawResult && activity" class="result-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title" @click.self="resultOpen = false"><section><button class="dialog-close" type="button" aria-label="关闭结果" @click="resultOpen = false">×</button><span class="result-mark"><svg><use href="#lottery-gift"/></svg></span><p>{{ activity.name }} · 本次参与结果</p><h2 id="result-title">{{ drawResult.prizeName }}</h2><span class="result-kind">{{ prizeKind(drawResult.prizeType) }}</span><div class="result-note"><svg><use href="#lottery-check"/></svg><span>本次抽奖结果已记录。</span></div><button class="dialog-confirm" type="button" @click="resultOpen = false">我知道了</button></section></div>
   </div>
 </template>
 
@@ -567,6 +610,37 @@ onBeforeUnmount(() => {
 
 .records-error {
   color: #a23843;
+}
+
+.records-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.records-pagination > div {
+  display: flex;
+  gap: 8px;
+}
+
+.records-pagination button {
+  min-height: 34px;
+  padding: 0 13px;
+  color: var(--blue);
+  background: #e2ebfa;
+  border: 0;
+  border-radius: 9px;
+  font-weight: 700;
+}
+
+.records-pagination button:disabled {
+  opacity: .48;
+  cursor: not-allowed;
 }
 
 @keyframes record-pulse {

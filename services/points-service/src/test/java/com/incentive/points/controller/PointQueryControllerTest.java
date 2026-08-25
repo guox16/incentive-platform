@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.incentive.points.application.PointAccountService;
 import com.incentive.points.config.PointsSecurityConfiguration;
 import com.incentive.points.dto.PointTransactionPageResponse;
+import com.incentive.points.domain.PointTransactionType;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,7 +30,7 @@ class PointQueryControllerTest {
 
   @Test
   void bindsPaginationParametersByTheirHttpNames() throws Exception {
-    when(service.getTransactions(1L, 2, 30))
+    when(service.getTransactions(1L, 2, 30, PointTransactionType.CREDIT))
         .thenReturn(new PointTransactionPageResponse(List.of(), 2, 30, 0, 0));
 
     mockMvc.perform(get("/api/v1/points/me/transactions")
@@ -37,12 +38,13 @@ class PointQueryControllerTest {
                 .authorities(new SimpleGrantedAuthority("POINTS_SELF")))
             .header("X-User-Id", "999")
             .queryParam("page", "2")
-            .queryParam("size", "30"))
+            .queryParam("size", "30")
+            .queryParam("type", "CREDIT"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.page").value(2))
         .andExpect(jsonPath("$.size").value(30));
 
-    verify(service).getTransactions(1L, 2, 30);
+    verify(service).getTransactions(1L, 2, 30, PointTransactionType.CREDIT);
   }
 
   @Test

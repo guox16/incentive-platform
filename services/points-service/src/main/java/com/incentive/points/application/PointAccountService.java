@@ -47,9 +47,12 @@ public class PointAccountService {
 
   /** 分页查询用户的积分流水。 */
   @Transactional(readOnly = true)
-  public PointTransactionPageResponse getTransactions(Long userId, int page, int size) {
-    var result = transactionRepository.findByUserIdOrderByCreatedAtDesc(
-        userId, PageRequest.of(page, size));
+  public PointTransactionPageResponse getTransactions(
+      Long userId, int page, int size, PointTransactionType type) {
+    var pageable = PageRequest.of(page, size);
+    var result = type == null
+        ? transactionRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+        : transactionRepository.findByUserIdAndTypeOrderByCreatedAtDesc(userId, type, pageable);
     var items = result.getContent().stream().map(transaction -> toResponse(transaction, false)).toList();
     return new PointTransactionPageResponse(items, result.getNumber(), result.getSize(),
         result.getTotalElements(), result.getTotalPages());

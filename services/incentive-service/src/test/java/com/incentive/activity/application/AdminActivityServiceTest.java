@@ -12,13 +12,18 @@ import com.incentive.activity.application.lottery.LotteryPreDrawRuleStore;
 import com.incentive.activity.domain.ActivityStatus;
 import com.incentive.activity.domain.ActivityType;
 import com.incentive.activity.domain.IncentiveActivity;
+import com.incentive.activity.domain.LotteryPrize;
 import com.incentive.activity.domain.ParticipationRule;
 import com.incentive.activity.dto.CreateActivityRequest;
 import com.incentive.activity.dto.LotteryPreDrawRuleRequest;
 import com.incentive.activity.dto.UpdateActivityRequest;
+import com.incentive.activity.infrastructure.BusinessNumberGenerator;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryPrizeRepository;
 import com.incentive.activity.repository.ParticipationRuleRepository;
+import com.incentive.activity.repository.LotteryPreDrawRuleConfigRepository;
+import com.incentive.activity.repository.RedemptionRecordRepository;
+import com.incentive.activity.repository.LotteryOrderRepository;
 import com.incentive.activity.support.IncentiveBusinessException;
 import java.lang.reflect.Field;
 import java.time.Clock;
@@ -40,19 +45,24 @@ class AdminActivityServiceTest {
   @Mock ParticipationRuleRepository ruleRepository;
   @Mock LotteryPreDrawRuleStore preDrawRuleStore;
   @Mock LotteryPrizeRepository lotteryPrizeRepository;
+  @Mock LotteryPreDrawRuleConfigRepository preDrawRuleConfigRepository;
+  @Mock RedemptionRecordRepository redemptionRecordRepository;
+  @Mock LotteryOrderRepository lotteryOrderRepository;
   @Mock LotteryPreDrawRuleChain preDrawRuleChain;
+  @Mock BusinessNumberGenerator businessNumberGenerator;
   AdminActivityService service;
 
   @BeforeEach
   void setUp() {
     service = new AdminActivityService(activityRepository, ruleRepository, preDrawRuleStore,
-        lotteryPrizeRepository, preDrawRuleChain,
+        lotteryPrizeRepository, preDrawRuleConfigRepository,
+        redemptionRecordRepository, lotteryOrderRepository, preDrawRuleChain, businessNumberGenerator,
         Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
   @Test
   void createsDraftActivityWithFirstRule() {
-    when(activityRepository.existsByCode("SUMMER_DRAW")).thenReturn(false);
+    when(businessNumberGenerator.next()).thenReturn(12345L);
     when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
       IncentiveActivity activity = call.getArgument(0);
       setId(activity, 9L);
@@ -66,9 +76,10 @@ class AdminActivityServiceTest {
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(9L))
         .thenReturn(Optional.of(rule(19L, 9L, 1, 20, 3, NOW)));
 
-    var response = service.create(new CreateActivityRequest("SUMMER_DRAW", "夏日抽奖",
+    var response = service.create(new CreateActivityRequest("夏日抽奖",
         ActivityType.LOTTERY, NOW, NOW.plusSeconds(3600), 20, 3, null, List.of()));
 
+    assertThat(response.code()).isEqualTo("LOTTERY_9IX");
     assertThat(response.status()).isEqualTo(ActivityStatus.DRAFT);
     assertThat(response.ruleVersion()).isEqualTo(1);
     verify(preDrawRuleChain).validateConfiguration(List.of(), null);
@@ -81,6 +92,8 @@ class AdminActivityServiceTest {
     when(activityRepository.findById(7L)).thenReturn(Optional.of(activity));
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(7L))
         .thenReturn(Optional.of(oldRule));
+    when(lotteryPrizeRepository.findByActivityIdAndRuleIdOrderByDisplayOrderAscIdAsc(7L, 17L))
+        .thenReturn(List.of(org.mockito.Mockito.mock(LotteryPrize.class)));
     when(ruleRepository.saveAndFlush(any(ParticipationRule.class))).thenAnswer(call -> {
       ParticipationRule rule = call.getArgument(0);
       setId(rule, 18L);
@@ -98,7 +111,7 @@ class AdminActivityServiceTest {
 
   @Test
   void storesEachLotteryRuleAsAnIndependentVersionedRow() {
-    when(activityRepository.existsByCode("RULE_DRAW")).thenReturn(false);
+    when(businessNumberGenerator.next()).thenReturn(12347L);
     when(activityRepository.save(any(IncentiveActivity.class))).thenAnswer(call -> {
       IncentiveActivity activity = call.getArgument(0);
       setId(activity, 11L);
@@ -111,7 +124,7 @@ class AdminActivityServiceTest {
     });
     when(ruleRepository.findFirstByActivityIdOrderByRuleVersionDesc(11L))
         .thenReturn(Optional.of(rule(21L, 11L, 1, 10, 3, NOW)));
-    service.create(new CreateActivityRequest("RULE_DRAW", "规则抽奖", ActivityType.LOTTERY,
+    service.create(new CreateActivityRequest("规则抽奖", ActivityType.LOTTERY,
         NOW, NOW.plusSeconds(3600), 10, 3, 999L,
         List.of(new LotteryPreDrawRuleRequest(
             "USER_LIST", true, List.of(7L, 8L), null, null))));
@@ -129,18 +142,44 @@ class AdminActivityServiceTest {
 
   @Test
   void rejectsInvalidActivityTime() {
-    assertThatThrownBy(() -> service.create(new CreateActivityRequest("BAD_TIME", "错误时间",
-        ActivityType.REDEMPTION, NOW, NOW, 0, null, null, List.of())))
+    assertThatThrownBy(() -> service.create(new CreateActivityRequest("错误时间",
+        ActivityType.LOTTERY, NOW, NOW, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("结束时间必须晚于开始时间");
   }
 
   @Test
   void rejectsCheckInManagementThroughGenericRules() {
-    assertThatThrownBy(() -> service.create(new CreateActivityRequest("CHECK_IN", "签到",
+    assertThatThrownBy(() -> service.create(new CreateActivityRequest("签到",
         ActivityType.CHECK_IN, NOW, null, 0, null, null, List.of())))
         .isInstanceOf(IncentiveBusinessException.class)
         .hasMessage("签到活动请使用签到规则管理");
+  }
+
+  @Test
+  void deletesEndedActivityWithoutParticipation() {
+    IncentiveActivity activity = activity(7L);
+    activity.update("抽奖", ActivityStatus.ENDED, NOW, NOW.plusSeconds(3600));
+    when(activityRepository.findById(7L)).thenReturn(Optional.of(activity));
+
+    service.delete(7L);
+
+    verify(preDrawRuleConfigRepository).deleteByActivityId(7L);
+    verify(lotteryPrizeRepository).deleteByActivityId(7L);
+    verify(ruleRepository).deleteByActivityId(7L);
+    verify(activityRepository).delete(activity);
+  }
+
+  @Test
+  void rejectsDeletingActivityWithParticipation() {
+    IncentiveActivity activity = activity(7L);
+    activity.update("抽奖", ActivityStatus.ENDED, NOW, NOW.plusSeconds(3600));
+    when(activityRepository.findById(7L)).thenReturn(Optional.of(activity));
+    when(lotteryOrderRepository.countByActivityId(7L)).thenReturn(1L);
+
+    assertThatThrownBy(() -> service.delete(7L))
+        .isInstanceOf(IncentiveBusinessException.class)
+        .hasMessage("已有参与记录的活动不能删除");
   }
 
   private IncentiveActivity activity(Long id) {

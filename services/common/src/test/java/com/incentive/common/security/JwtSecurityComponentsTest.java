@@ -39,6 +39,16 @@ class JwtSecurityComponentsTest {
   }
 
   @Test
+  void acceptsTrustedNonUrlIssuerUsedByInternalServices() {
+    Jwt jwt = jwt("incentive-service", Map.of("iss", "incentive-service"));
+
+    assertThat(new JwtTrustedIssuerValidator(List.of("incentive-service"))
+        .validate(jwt).hasErrors()).isFalse();
+    assertThat(new JwtTrustedIssuerValidator(List.of("award-service"))
+        .validate(jwt).hasErrors()).isTrue();
+  }
+
+  @Test
   void rejectsJtiStoredInRedisBlacklist() {
     StringRedisTemplate redis = mock(StringRedisTemplate.class);
     @SuppressWarnings("unchecked")

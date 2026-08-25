@@ -3,15 +3,18 @@ package com.incentive.award.application;
 import com.incentive.award.domain.Award;
 import com.incentive.award.domain.AwardInventoryLedger;
 import com.incentive.award.domain.AwardStatus;
+import com.incentive.award.domain.AwardType;
 import com.incentive.award.dto.AdjustInventoryRequest;
 import com.incentive.award.dto.AwardInventoryLedgerResponse;
 import com.incentive.award.dto.AwardResponse;
 import com.incentive.award.dto.AwardUpsertRequest;
+import com.incentive.award.infrastructure.BusinessNumberGenerator;
 import com.incentive.award.repository.AwardInventoryLedgerRepository;
 import com.incentive.award.repository.AwardRepository;
 import com.incentive.award.support.AwardBusinessException;
 import java.time.Clock;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,12 +24,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class AwardService {
   private final AwardRepository repository;
   private final AwardInventoryLedgerRepository ledgerRepository;
+  private final BusinessNumberGenerator businessNumberGenerator;
   private final Clock clock;
 
   public AwardService(AwardRepository repository,
-      AwardInventoryLedgerRepository ledgerRepository, Clock clock) {
+      AwardInventoryLedgerRepository ledgerRepository,
+      BusinessNumberGenerator businessNumberGenerator, Clock clock) {
     this.repository = repository;
     this.ledgerRepository = ledgerRepository;
+    this.businessNumberGenerator = businessNumberGenerator;
     this.clock = clock;
   }
 
@@ -41,24 +47,35 @@ public class AwardService {
 
   @Transactional
   public AwardResponse create(AwardUpsertRequest request) {
-    if (repository.existsByCode(request.code().trim())) {
-      throw new AwardBusinessException("AWARD_CODE_EXISTS", "奖品编码已存在", HttpStatus.CONFLICT);
-    }
-    return response(repository.save(new Award(request, clock.instant())));
+    String code = nextCode(request.type());
+    return response(repository.save(new Award(code, request, clock.instant())));
+  }
+
+  public List<AwardResponse> listRedeemable() {
+    return repository.findByRedemptionEnabledTrueAndStatusAndAvailableStockGreaterThanOrderByIdAsc(
+        AwardStatus.ACTIVE, 0).stream().map(this::response).toList();
   }
 
   @Transactional
   public AwardResponse update(Long id, AwardUpsertRequest request) {
     Award award = find(id);
-    if (!award.getCode().equals(request.code().trim())) {
-      throw new AwardBusinessException("AWARD_CODE_IMMUTABLE", "奖品编码创建后不可修改", HttpStatus.CONFLICT);
-    }
     if (award.getTotalStock() != request.totalStock()
         || award.getAvailableStock() != request.availableStock()) {
       throw new AwardBusinessException(
           "AWARD_INVENTORY_IMMUTABLE", "请使用库存调整接口修改库存", HttpStatus.CONFLICT);
     }
     award.update(request, clock.instant());
+    return response(award);
+  }
+
+  @Transactional
+  public AwardResponse updateStatus(Long id, AwardStatus status) {
+    if (status == AwardStatus.DELETED) {
+      throw new AwardBusinessException("AWARD_STATUS_INVALID",
+          "不能通过状态更新接口设置软删除状态", HttpStatus.BAD_REQUEST);
+    }
+    Award award = find(id);
+    award.updateStatus(status, clock.instant());
     return response(award);
   }
 
@@ -112,7 +129,13 @@ public class AwardService {
   private AwardResponse response(Award award) {
     return new AwardResponse(award.getId(), award.getCode(), award.getName(), award.getType(),
         award.getStatus(), award.getCoverUrl(), award.getAwardPayload(), award.getTotalStock(),
-        award.getAvailableStock(), award.getCreatedAt(), award.getUpdatedAt());
+        award.getAvailableStock(), award.isRedemptionEnabled(), award.getRedemptionPointsPrice(),
+        award.getCreatedAt(), award.getUpdatedAt());
+  }
+
+  private String nextCode(AwardType type) {
+    return "PRIZE_" + type.name() + "_"
+        + Long.toUnsignedString(businessNumberGenerator.next(), 36).toUpperCase(Locale.ROOT);
   }
 
   private AwardInventoryLedgerResponse ledgerResponse(AwardInventoryLedger ledger) {

@@ -5,6 +5,8 @@ import com.incentive.award.dto.AdjustInventoryRequest;
 import com.incentive.award.dto.AwardInventoryLedgerResponse;
 import com.incentive.award.dto.AwardResponse;
 import com.incentive.award.dto.AwardUpsertRequest;
+import com.incentive.award.dto.AwardStatusUpdateRequest;
+import com.incentive.award.dto.BatchAwardStatusUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -39,6 +42,12 @@ public class AwardController {
     return service.list();
   }
 
+  @GetMapping("/redeemable")
+  @Operation(summary = "查询兑换商城展示商品")
+  public List<AwardResponse> listRedeemable() {
+    return service.listRedeemable();
+  }
+
   @GetMapping("/{id}")
   @Operation(summary = "查询奖品详情")
   public AwardResponse get(@PathVariable @Positive Long id) {
@@ -57,6 +66,12 @@ public class AwardController {
   public AwardResponse update(@PathVariable @Positive Long id,
       @Valid @RequestBody AwardUpsertRequest request) {
     return service.update(id, request);
+  }
+
+  @PatchMapping("/status")
+  @Operation(summary = "更新奖品上下架状态")
+  public List<AwardResponse> updateStatus(@Valid @RequestBody BatchAwardStatusUpdateRequest request) {
+    return request.ids().stream().map(id -> service.updateStatus(id, request.status())).toList();
   }
 
   @DeleteMapping("/{id}")

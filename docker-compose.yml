@@ -27,12 +27,11 @@ services:
     image: xuxueli/xxl-job-admin:3.4.2
     environment:
       PARAMS: >-
-        --spring.datasource.url=jdbc:mysql://mysql:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai
+        --spring.datasource.url=jdbc:mysql://${XXL_JOB_DB_HOST:?set XXL_JOB_DB_HOST}:${XXL_JOB_DB_PORT:-3306}/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai
         --spring.datasource.username=${MYSQL_USER:-incentive}
         --spring.datasource.password=${MYSQL_PASSWORD:?set MYSQL_PASSWORD}
         --xxl.job.accessToken=${XXL_JOB_ACCESS_TOKEN:?set XXL_JOB_ACCESS_TOKEN}
     ports: ["8088:8080"]
-    depends_on: { mysql: { condition: service_healthy } }
   gateway:
     build: { context: ., args: { MODULE: gateway } }
     ports: ["8080:8080"]
@@ -40,8 +39,8 @@ services:
       NACOS_ADDR: nacos:8848
       USER_SERVICE_URL: http://user-service:8081
       POINTS_SERVICE_URL: http://points-service:8082
-      INCENTIVE_SERVICE_URL: http://incentive-service:8085
       AWARD_SERVICE_URL: http://award-service:8084
+      INCENTIVE_SERVICE_URL: http://incentive-service:8085
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -98,6 +97,7 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: "${REDIS_PASSWORD:?set REDIS_PASSWORD}"
       POINTS_SERVICE_URL: http://points-service:8082
+      AWARD_SERVICE_URL: http://award-service:8084
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
       INTERNAL_JWT_SECRET: "${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET}"
       RABBITMQ_HOST: rabbitmq

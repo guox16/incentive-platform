@@ -45,6 +45,12 @@ public class Award {
   @Column(name = "available_stock", nullable = false)
   private long availableStock;
 
+  @Column(name = "redemption_enabled", nullable = false)
+  private boolean redemptionEnabled;
+
+  @Column(name = "redemption_points_price")
+  private Long redemptionPointsPrice;
+
   @Version
   @Column(nullable = false)
   private long version;
@@ -57,14 +63,19 @@ public class Award {
 
   protected Award() {}
 
-  public Award(AwardUpsertRequest request, Instant now) {
-    this.code = request.code().trim();
+  public Award(String code, AwardUpsertRequest request, Instant now) {
+    this.code = code;
     this.createdAt = now;
     apply(request, now);
   }
 
   public void update(AwardUpsertRequest request, Instant now) {
     apply(request, now);
+  }
+
+  public void updateStatus(AwardStatus status, Instant now) {
+    this.status = status;
+    updatedAt = now;
   }
 
   public void softDelete(Instant now) {
@@ -83,6 +94,14 @@ public class Award {
     updatedAt = now;
   }
 
+  public void consumeInventory(Instant now) {
+    if (availableStock <= 0) {
+      throw new IllegalArgumentException("可用库存不足");
+    }
+    availableStock--;
+    updatedAt = now;
+  }
+
   private void apply(AwardUpsertRequest request, Instant now) {
     name = request.name().trim();
     type = request.type();
@@ -91,6 +110,8 @@ public class Award {
     awardPayload = normalize(request.awardPayload());
     totalStock = request.totalStock();
     availableStock = request.availableStock();
+    redemptionEnabled = request.redemptionEnabled();
+    redemptionPointsPrice = redemptionEnabled ? request.redemptionPointsPrice() : null;
     updatedAt = now;
   }
 
@@ -107,6 +128,8 @@ public class Award {
   public String getAwardPayload() { return awardPayload; }
   public long getTotalStock() { return totalStock; }
   public long getAvailableStock() { return availableStock; }
+  public boolean isRedemptionEnabled() { return redemptionEnabled; }
+  public Long getRedemptionPointsPrice() { return redemptionPointsPrice; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

@@ -18,6 +18,18 @@ type RecordKind = 'earn' | 'spend';
 type PointRecord = { id: number; date: string; time: string; title: string; detail: string; amount: number; kind: RecordKind };
 type CalendarDay = { iso: string; label: number; inMonth: boolean; today: boolean; signed: boolean };
 
+const pointSourceLabels: Record<string, string> = {
+  CHECK_IN: '每日签到',
+  AWARD: '奖品发放',
+  LOTTERY: '参与抽奖',
+  REDEMPTION: '商品兑换',
+  EXCHANGE: '积分兑换',
+  TASK: '任务奖励',
+  ADMIN: '管理员调整',
+  REFUND: '积分退回',
+  REGISTER: '注册奖励',
+};
+
 const router = useRouter();
 const loading = ref(true);
 const error = ref('');
@@ -29,18 +41,25 @@ const checkingIn = ref(false);
 const checkInError = ref('');
 const checkInFeedback = ref('');
 const records = ref<PointRecord[]>([]);
+const ledgerLoading = ref(false);
+const ledgerError = ref('');
+const recordPage = ref(0);
+const recordTotalElements = ref(0);
+const recordTotalPages = ref(0);
+const POINT_RECORD_PAGE_SIZE = 10;
+let ledgerRequestVersion = 0;
 
-const filteredRecords = computed(() => activeFilter.value === 'all'
-  ? records.value
-  : records.value.filter(record => record.kind === activeFilter.value));
 const groupedRecords = computed(() => {
   const groups = new Map<string, PointRecord[]>();
-  filteredRecords.value.forEach(record => groups.set(record.date, [...(groups.get(record.date) ?? []), record]));
+  records.value.forEach(record => groups.set(record.date, [...(groups.get(record.date) ?? []), record]));
   return [...groups.entries()].map(([date, entries]) => ({ date, entries }));
 });
 const formattedBalance = computed(() => new Intl.NumberFormat('zh-CN').format(balance.value));
+const checkInRecorded = computed(() => checkIn.value?.checkedInToday === true);
+const checkInPending = computed(() =>
+  checkInRecorded.value && checkIn.value?.rewardStatus === 'PENDING');
 const checkInCompleted = computed(() =>
-  checkIn.value?.checkedInToday === true && checkIn.value.rewardStatus === 'AWARDED');
+  checkInRecorded.value && checkIn.value?.rewardStatus === 'AWARDED');
 const monthLabel = computed(() => {
   const date = parseBusinessDate(checkIn.value?.businessDate);
   return `${date.getFullYear()}年${date.getMonth() + 1}月`;
@@ -106,17 +125,69 @@ function clearCheckInRequestId() {
   localStorage.removeItem(checkInRequestStorageKey());
 }
 
+function transactionType() {
+  return activeFilter.value === 'earn' ? 'CREDIT'
+    : activeFilter.value === 'spend' ? 'DEBIT' : undefined;
+}
+
+function applyTransactionPage(page: PointTransactionPageResponse) {
+  records.value = page.items.map(toPointRecord);
+  recordPage.value = page.page;
+  recordTotalElements.value = page.totalElements;
+  recordTotalPages.value = page.totalPages;
+}
+
+async function loadTransactions(showLoading = true) {
+  const requestVersion = ++ledgerRequestVersion;
+  if (showLoading) ledgerLoading.value = true;
+  ledgerError.value = '';
+  try {
+    const response = await http.get<PointTransactionPageResponse>('/points/me/transactions', {
+      params: {
+        page: recordPage.value,
+        size: POINT_RECORD_PAGE_SIZE,
+        type: transactionType(),
+      },
+    });
+    if (requestVersion === ledgerRequestVersion) applyTransactionPage(response.data);
+  } catch (requestError) {
+    if (requestVersion !== ledgerRequestVersion) return;
+    if (axios.isAxiosError(requestError) && requestError.response?.status === 401) {
+      await router.replace('/login');
+      return;
+    }
+    ledgerError.value = getErrorMessage(requestError, '暂时无法获取积分明细');
+  } finally {
+    if (requestVersion === ledgerRequestVersion) ledgerLoading.value = false;
+  }
+}
+
+function changeFilter(filter: 'all' | RecordKind) {
+  if (ledgerLoading.value || filter === activeFilter.value) return;
+  activeFilter.value = filter;
+  recordPage.value = 0;
+  void loadTransactions();
+}
+
+function changeRecordPage(page: number) {
+  if (ledgerLoading.value || page < 0 || page >= recordTotalPages.value) return;
+  recordPage.value = page;
+  void loadTransactions();
+}
+
 async function loadPoints() {
   loading.value = true;
   error.value = '';
   try {
     const [balanceResponse, transactionsResponse, checkInResponse] = await Promise.all([
       http.get<PointBalanceResponse>('/points/me/balance'),
-      http.get<PointTransactionPageResponse>('/points/me/transactions', { params: { page: 0, size: 100 } }),
+      http.get<PointTransactionPageResponse>('/points/me/transactions', {
+        params: { page: 0, size: POINT_RECORD_PAGE_SIZE },
+      }),
       http.get<DailyCheckInResponse>('/activities/check-ins/me'),
     ]);
     balance.value = balanceResponse.data.balance;
-    records.value = transactionsResponse.data.items.map(toPointRecord);
+    applyTransactionPage(transactionsResponse.data);
     checkIn.value = checkInResponse.data;
     if (checkInResponse.data.rewardStatus === 'AWARDED') clearCheckInRequestId();
   } catch (requestError) {
@@ -142,12 +213,11 @@ async function performCheckIn() {
     if (response.data.balanceAfter !== null) balance.value = response.data.balanceAfter;
     checkInFeedback.value = `签到成功，获得 ${response.data.rewardPoints} 积分`;
     try {
-      const [balanceResponse, transactionsResponse] = await Promise.all([
-        http.get<PointBalanceResponse>('/points/me/balance'),
-        http.get<PointTransactionPageResponse>('/points/me/transactions', { params: { page: 0, size: 100 } }),
-      ]);
+      const balanceResponse = await http.get<PointBalanceResponse>('/points/me/balance');
       balance.value = balanceResponse.data.balance;
-      records.value = transactionsResponse.data.items.map(toPointRecord);
+      recordPage.value = 0;
+      await loadTransactions(false);
+      if (ledgerError.value) throw new Error(ledgerError.value);
     } catch {
       checkInFeedback.value = `签到成功，获得 ${response.data.rewardPoints} 积分；积分明细稍后刷新`;
     }
@@ -165,7 +235,7 @@ function toPointRecord(transaction: PointTransactionResponse): PointRecord {
     id: transaction.transactionId,
     date: new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(createdAt),
     time: new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(createdAt),
-    title: transaction.source === 'CHECK_IN' ? '每日签到' : transaction.source,
+    title: pointSourceLabels[transaction.source] ?? (kind === 'earn' ? '积分获得' : '积分使用'),
     detail: transaction.remark || `变动后余额 ${transaction.balanceAfter}`,
     amount: kind === 'earn' ? transaction.amount : -transaction.amount,
     kind,
@@ -198,12 +268,13 @@ onMounted(loadPoints);
         <section class="balance-panel" aria-labelledby="balance-title">
           <div class="balance-copy"><span id="balance-title">当前可用积分</span><strong>{{ formattedBalance }}</strong><p>积分可用于参与活动或兑换商品，以实际规则为准。</p></div>
           <div class="check-in-area">
-            <div class="check-in-heading"><svg><use href="#points-calendar" /></svg><div><h1>每日签到</h1><p>每天签到，积累下一次收获</p></div></div>
+            <div class="check-in-heading"><svg><use href="#points-calendar" /></svg><div><h1>{{ checkInRecorded ? '今日已签到' : '每日签到' }}</h1><p>{{ checkInPending ? `${checkIn?.rewardPoints ?? 10} 积分待到账，请稍后重试` : checkInCompleted ? '今日签到积分已到账' : '每天签到，积累下一次收获' }}</p></div></div>
             <button class="check-in-button" type="button" :disabled="checkingIn || checkInCompleted" @click="performCheckIn">
               <span v-if="checkingIn" class="button-spinner" aria-hidden="true"></span>
-              <span>{{ checkingIn ? '签到处理中' : checkInCompleted ? '今日已签到' : checkIn?.rewardStatus === 'PENDING' ? '重试积分发放' : '今日签到' }}</span>
-              <b v-if="!checkingIn">+{{ checkIn?.rewardPoints ?? 10 }}</b>
+              <span>{{ checkingIn ? (checkInPending ? '正在重试积分发放' : '签到处理中') : checkInCompleted ? '积分已到账' : checkInPending ? '立即重试' : '今日签到' }}</span>
+              <b v-if="!checkingIn && !checkInRecorded">+{{ checkIn?.rewardPoints ?? 10 }}</b>
             </button>
+            <p v-if="checkInPending" class="pending-reward-copy" role="status">无需再次签到，系统会保留本次签到记录。</p>
             <p class="streak-copy">连续签到 <strong>{{ checkIn?.currentStreak ?? 0 }}</strong> 天</p>
             <p v-if="checkInFeedback" class="check-in-message success" role="status">{{ checkInFeedback }}</p>
             <p v-if="checkInError" class="check-in-message error" role="alert">{{ checkInError }}</p>
@@ -234,24 +305,30 @@ onMounted(loadPoints);
             <div class="activity-cards">
               <article class="activity-card">
                 <div class="activity-icon"><svg><use href="#points-gift" /></svg></div>
-                <div><h3>幸运抽奖</h3><p>使用积分，抽取惊喜好礼</p><button type="button" @click="router.push('/lottery')">去抽奖</button></div>
+                <div><h3>幸运抽奖</h3><p>使用积分，抽取惊喜好礼</p><button class="primary-action" type="button" @click="router.push('/lottery')">去抽奖</button></div>
               </article>
               <article class="activity-card">
                 <div class="activity-icon"><svg><use href="#points-bag" /></svg></div>
-                <div><h3>积分兑换</h3><p>用积分兑换心仪好物</p><button type="button" @click="router.push('/redemption')">去兑换</button></div>
+                <div><h3>积分兑换</h3><p>用积分兑换心仪好物</p><button class="primary-action" type="button" @click="router.push('/redemption')">去兑换</button></div>
               </article>
             </div>
           </div>
 
-          <div v-else class="ledger-content" role="tabpanel">
-            <div class="ledger-toolbar"><span>共 {{ records.length }} 条记录</span><div class="filters" role="group" aria-label="积分流水筛选"><button :class="{ selected: activeFilter === 'all' }" type="button" @click="activeFilter = 'all'">全部</button><button :class="{ selected: activeFilter === 'earn' }" type="button" @click="activeFilter = 'earn'">获得</button><button :class="{ selected: activeFilter === 'spend' }" type="button" @click="activeFilter = 'spend'">使用</button></div></div>
-            <div v-if="groupedRecords.length" class="ledger-list">
+          <div v-else class="ledger-content" role="tabpanel" :aria-busy="ledgerLoading">
+            <div class="ledger-toolbar"><span>共 {{ recordTotalElements }} 条记录</span><div class="filters" role="group" aria-label="积分流水筛选"><button :disabled="ledgerLoading" :class="{ selected: activeFilter === 'all' }" type="button" @click="changeFilter('all')">全部</button><button :disabled="ledgerLoading" :class="{ selected: activeFilter === 'earn' }" type="button" @click="changeFilter('earn')">获得</button><button :disabled="ledgerLoading" :class="{ selected: activeFilter === 'spend' }" type="button" @click="changeFilter('spend')">使用</button></div></div>
+            <div v-if="ledgerLoading && !records.length" class="empty-state"><span class="loader" aria-hidden="true"></span><strong>正在获取积分记录</strong></div>
+            <div v-else-if="ledgerError && !records.length" class="empty-state ledger-error"><strong>积分明细暂不可用</strong><p>{{ ledgerError }}</p><button type="button" @click="loadTransactions()">重新加载</button></div>
+            <div v-else-if="groupedRecords.length" class="ledger-list" :class="{ updating: ledgerLoading }">
               <section v-for="group in groupedRecords" :key="group.date" class="date-group">
                 <h3>{{ group.date }}</h3>
                 <ul><li v-for="record in group.entries" :key="record.id"><span class="record-icon" :class="record.kind"><svg><use :href="record.kind === 'earn' ? '#points-plus' : '#points-minus'" /></svg></span><div class="record-copy"><strong>{{ record.title }}</strong><span>{{ record.detail }}</span></div><time>{{ record.time }}</time><b :class="record.kind">{{ record.amount > 0 ? '+' : '' }}{{ record.amount }}</b></li></ul>
               </section>
             </div>
             <div v-else class="empty-state"><strong>暂无积分记录</strong><p>完成签到或使用积分后，记录会显示在这里。</p></div>
+            <nav v-if="recordTotalElements" class="record-pagination" aria-label="积分明细分页">
+              <span>第 {{ recordPage + 1 }} / {{ recordTotalPages }} 页</span>
+              <div><button type="button" :disabled="ledgerLoading || recordPage === 0" @click="changeRecordPage(recordPage - 1)">上一页</button><button type="button" :disabled="ledgerLoading || recordPage + 1 >= recordTotalPages" @click="changeRecordPage(recordPage + 1)">下一页</button></div>
+            </nav>
           </div>
         </section>
         <footer><span>积分规则</span><span>活动说明</span><span>隐私说明</span><em>© 偶得 · 账户中心</em></footer>
@@ -264,12 +341,12 @@ onMounted(loadPoints);
 .points-page{--blue:#174fa7;--navy:#102f65;--ink:#17213a;--paper:#f8f7f2;--line:#d7dde6;--yellow:#f1c84a;--muted:#697287;min-width:1180px;min-height:100vh;background:#e8edf3;color:var(--ink)}
 .points-page ::selection{color:#fff;background:#174fa7}.points-page svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.points-defs{position:absolute;width:0!important;height:0!important;overflow:hidden}
 .top-nav{display:flex;height:74px;align-items:center;padding:0 48px;color:#eef4ff;background:var(--navy);box-shadow:0 2px 8px rgb(16 47 101 / 14%)}.brand{display:flex;align-items:center;gap:12px;flex:0 0 180px;color:#fff;font-size:18px;font-weight:700;text-decoration:none}.brand-mark{display:grid;width:34px;height:34px;place-items:center;color:var(--navy);background:var(--yellow);border-radius:9px 9px 4px 9px;font-size:17px;font-weight:800}.top-nav nav{display:flex;align-items:center;gap:6px;height:100%}.top-nav nav a{display:flex;align-items:center;gap:10px;height:42px;padding:0 15px;color:#afc0dc;border-radius:10px;font-size:14px;text-decoration:none;transition:color .18s ease,background .18s ease}.top-nav nav a:hover{color:#fff;background:#183f7b}.top-nav nav a:focus-visible,.brand:focus-visible{outline:3px solid rgb(241 200 74 / 55%);outline-offset:3px}.top-nav nav a.active{color:var(--navy);background:var(--yellow);font-weight:700}.top-nav nav a svg{width:18px}.top-support{display:flex;align-items:baseline;gap:10px;margin-left:auto;color:#9eb1ce;font-size:12px}.top-support strong{color:#f4f7fd;font-size:14px;font-variant-numeric:tabular-nums}
-.workspace{max-width:1340px;min-height:calc(100vh - 74px);margin:0 auto;padding:34px 48px 28px}.balance-panel{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(390px,.8fr);min-height:220px;color:#fff;background:var(--blue);border-radius:16px;box-shadow:0 18px 40px rgb(31 54 94 / 16%)}.balance-copy{display:grid;align-content:center;padding:36px 54px}.balance-copy>span{color:#c9d9f3;font-size:13px;font-weight:600}.balance-copy>strong{margin:5px 0;font-size:64px;line-height:1.05;letter-spacing:-.035em;font-variant-numeric:tabular-nums}.balance-copy p{margin:0;color:#c9d9f3;font-size:13px}.check-in-area{display:grid;align-content:center;padding:30px 50px;border-left:1px solid rgb(255 255 255 / 22%)}.check-in-heading{display:flex;align-items:center;gap:15px}.check-in-heading>svg{width:42px;height:42px;color:#c9d9f3}.check-in-heading h1{margin:0 0 3px;font-size:21px;letter-spacing:-.015em}.check-in-heading p{margin:0;color:#c9d9f3;font-size:12px}.check-in-button{display:flex;height:50px;align-items:center;justify-content:center;gap:12px;margin-top:17px;color:var(--blue);background:#fff;border:0;border-radius:9px;box-shadow:0 9px 20px rgb(7 39 91 / 22%);font-size:14px;font-weight:700;transition:transform .18s ease,box-shadow .18s ease}.check-in-button:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 12px 25px rgb(7 39 91 / 28%)}.check-in-button:focus-visible,.content-tabs button:focus-visible,.filters button:focus-visible{outline:3px solid rgb(241 200 74 / 65%);outline-offset:3px}.check-in-button:disabled{color:#526e9c;background:#eaf0f9;box-shadow:none;cursor:default}.check-in-button b{color:var(--blue);font-size:16px}.streak-copy{margin:11px 0 0;color:#c9d9f3;font-size:13px}.streak-copy strong{color:var(--yellow);font-size:16px}.check-in-message{margin:6px 0 0;font-size:12px}.check-in-message.success{color:#d8f0df}.check-in-message.error{color:#ffe1e4}.button-spinner{width:16px;height:16px;border:2px solid rgb(23 79 167 / 25%);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+.workspace{max-width:1340px;min-height:calc(100vh - 74px);margin:0 auto;padding:34px 48px 28px}.balance-panel{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(390px,.8fr);min-height:220px;color:#fff;background:var(--blue);border-radius:16px;box-shadow:0 18px 40px rgb(31 54 94 / 16%)}.balance-copy{display:grid;align-content:center;padding:36px 54px}.balance-copy>span{color:#c9d9f3;font-size:13px;font-weight:600}.balance-copy>strong{margin:5px 0;font-size:64px;line-height:1.05;letter-spacing:-.035em;font-variant-numeric:tabular-nums}.balance-copy p{margin:0;color:#c9d9f3;font-size:13px}.check-in-area{display:grid;align-content:center;padding:30px 50px;border-left:1px solid rgb(255 255 255 / 22%)}.check-in-heading{display:flex;align-items:center;gap:15px}.check-in-heading>svg{width:42px;height:42px;color:#c9d9f3}.check-in-heading h1{margin:0 0 3px;font-size:21px;letter-spacing:-.015em}.check-in-heading p{margin:0;color:#c9d9f3;font-size:12px}.check-in-button{display:flex;height:50px;align-items:center;justify-content:center;gap:12px;margin-top:17px;color:var(--blue);background:#fff;border:0;border-radius:9px;box-shadow:0 9px 20px rgb(7 39 91 / 22%);font-size:14px;font-weight:700;transition:transform .18s ease,box-shadow .18s ease}.check-in-button:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 12px 25px rgb(7 39 91 / 28%)}.check-in-button:focus-visible,.content-tabs button:focus-visible,.filters button:focus-visible{outline:3px solid rgb(241 200 74 / 65%);outline-offset:3px}.check-in-button:disabled{color:#526e9c;background:#eaf0f9;box-shadow:none;cursor:default}.check-in-button b{color:var(--blue);font-size:16px}.pending-reward-copy{margin:8px 0 0;color:#c9d9f3;font-size:11px;line-height:1.55}.streak-copy{margin:11px 0 0;color:#c9d9f3;font-size:13px}.streak-copy strong{color:var(--yellow);font-size:16px}.check-in-message{margin:6px 0 0;font-size:12px}.check-in-message.success{color:#d8f0df}.check-in-message.error{color:#ffe1e4}.button-spinner{width:16px;height:16px;border:2px solid rgb(23 79 167 / 25%);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
 .content-panel{margin-top:22px;overflow:hidden;background:var(--paper);border-radius:16px;box-shadow:0 10px 28px rgb(38 50 75 / 9%)}.content-header{display:flex;align-items:center;justify-content:space-between;padding:24px 32px;border-bottom:1px solid var(--line)}.content-header h2{margin:0 0 4px;font-size:24px;letter-spacing:-.02em}.content-header p{margin:0;color:var(--muted);font-size:13px}.content-tabs,.filters{display:flex;gap:4px;padding:4px;background:#e8edf3;border-radius:9px}.content-tabs button{min-width:106px;height:38px;color:#647087;background:transparent;border:0;border-radius:6px;font:inherit;font-size:13px;font-weight:700}.content-tabs button.selected,.filters button.selected{color:var(--navy);background:var(--yellow)}
 .activities-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(330px,.85fr);gap:22px;padding:24px 32px 30px}.calendar-panel{border:1px solid var(--line);border-radius:12px}.calendar-heading{display:flex;align-items:center;justify-content:space-between;padding:21px 24px 15px}.calendar-heading h3,.activity-card h3{margin:0;font-size:18px}.calendar-heading>strong{font-size:18px;font-variant-numeric:tabular-nums}.weekdays,.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);text-align:center}.weekdays{padding:0 18px;color:#68758b;font-size:12px;font-weight:700}.weekdays span{padding:8px 0}.calendar-grid{padding:0 18px 14px}.calendar-grid time{position:relative;display:grid;height:48px;place-items:center;color:#25314b;font-size:13px;font-style:normal;font-variant-numeric:tabular-nums}.calendar-grid time.muted{color:#aab3c3}.calendar-grid time.today span{display:grid;width:31px;height:31px;place-items:center;color:var(--navy);background:var(--yellow);border-radius:50%;font-weight:800}.calendar-grid time.signed:not(.today) span{font-weight:700}.calendar-grid time i{position:absolute;right:16%;bottom:5px;display:grid;width:16px;height:16px;place-items:center;color:#fff;background:var(--blue);border:2px solid var(--paper);border-radius:50%;font-size:9px;font-style:normal}.calendar-summary{display:flex;min-height:54px;align-items:center;justify-content:center;gap:9px;color:var(--muted);border-top:1px solid var(--line);font-size:13px}.calendar-summary svg{width:18px;color:var(--blue)}.calendar-summary strong{color:var(--blue);font-size:16px}.activity-cards{display:grid;grid-template-rows:1fr 1fr;gap:16px}.activity-card{display:grid;grid-template-columns:92px 1fr;align-items:center;gap:20px;padding:24px;border:1px solid var(--line);border-radius:12px;background:#fff}.activity-icon{display:grid;width:84px;height:84px;place-items:center;color:var(--blue);background:#edf3fb;border-radius:16px 16px 6px 16px}.activity-icon svg{width:43px;height:43px}.activity-card p{margin:7px 0 15px;color:var(--muted);font-size:13px}.activity-card button{height:36px;padding:0 13px;color:#647087;background:#e8edf3;border:0;border-radius:7px;font-size:12px;font-weight:700;cursor:not-allowed}
-.ledger-toolbar{display:flex;align-items:center;justify-content:space-between;padding:18px 32px 6px;color:var(--muted);font-size:12px}.filters button{min-width:58px;height:32px;color:#647087;background:transparent;border:0;border-radius:6px;font:inherit;font-size:12px;font-weight:700}.ledger-list{padding:0 32px 18px}.date-group h3{margin:22px 0 8px;color:var(--muted);font-size:12px}.date-group ul{margin:0;padding:0;list-style:none}.date-group li{display:grid;grid-template-columns:42px minmax(0,1fr) 72px 82px;align-items:center;min-height:72px;border-bottom:1px solid #e4e8ee}.record-icon{display:grid;width:30px;height:30px;place-items:center;border-radius:9px}.record-icon svg{width:16px}.record-icon.earn{color:#315e3f;background:#e2efe4}.record-icon.spend{color:#7a5c1b;background:#f9edbf}.record-copy{display:grid;gap:3px}.record-copy strong{font-size:14px}.record-copy span,.date-group time{color:var(--muted);font-size:12px}.date-group b{font-size:15px;text-align:right;font-variant-numeric:tabular-nums}.date-group b.earn{color:#237346}.date-group b.spend{color:#9a6c16}.empty-state{padding:82px 32px;color:var(--muted);text-align:center}.empty-state strong{display:block;margin-bottom:6px;color:var(--ink);font-size:16px}.empty-state p{margin:0;font-size:13px}
+.ledger-toolbar{display:flex;align-items:center;justify-content:space-between;padding:18px 32px 6px;color:var(--muted);font-size:12px}.filters button{min-width:58px;height:32px;color:#647087;background:transparent;border:0;border-radius:6px;font:inherit;font-size:12px;font-weight:700}.filters button:disabled{cursor:wait}.ledger-list{padding:0 32px 18px;transition:opacity .15s ease}.ledger-list.updating{opacity:.55}.date-group h3{margin:22px 0 8px;color:var(--muted);font-size:12px}.date-group ul{margin:0;padding:0;list-style:none}.date-group li{display:grid;grid-template-columns:42px minmax(0,1fr) 72px 82px;align-items:center;min-height:72px;border-bottom:1px solid #e4e8ee}.record-icon{display:grid;width:30px;height:30px;place-items:center;border-radius:9px}.record-icon svg{width:16px}.record-icon.earn{color:#315e3f;background:#e2efe4}.record-icon.spend{color:#7a5c1b;background:#f9edbf}.record-copy{display:grid;gap:3px}.record-copy strong{font-size:14px}.record-copy span,.date-group time{color:var(--muted);font-size:12px}.date-group b{font-size:15px;text-align:right;font-variant-numeric:tabular-nums}.date-group b.earn{color:#237346}.date-group b.spend{color:#9a6c16}.empty-state{display:grid;padding:82px 32px;place-items:center;color:var(--muted);text-align:center}.empty-state strong{display:block;margin-bottom:6px;color:var(--ink);font-size:16px}.empty-state p{margin:0;font-size:13px}.ledger-error strong{color:#a23843}.ledger-error button{margin-top:8px;padding:8px 12px;color:#fff;background:var(--blue);border:0;border-radius:8px;font-weight:700}.record-pagination{display:flex;align-items:center;justify-content:space-between;padding:14px 32px 18px;color:var(--muted);border-top:1px solid var(--line);font-size:12px;font-variant-numeric:tabular-nums}.record-pagination>div{display:flex;gap:8px}.record-pagination button{min-height:34px;padding:0 13px;color:var(--blue);background:#e2ebfa;border:0;border-radius:9px;font-weight:700}.record-pagination button:disabled{opacity:.48;cursor:not-allowed}
 footer{display:flex;gap:24px;align-items:center;padding:24px 4px 0;color:#747d90;font-size:11px}footer em{margin-left:auto;font-style:normal}.state-panel{display:grid;min-height:420px;place-content:center;justify-items:center;gap:10px;text-align:center}.state-panel strong{font-size:21px}.state-panel p{max-width:380px;margin:0;color:var(--muted);font-size:14px}.state-panel button{margin-top:8px;padding:11px 18px;color:#fff;background:var(--blue);border:0;border-radius:9px;font-weight:700}.error-state strong{color:#a23843}.loader{width:28px;height:28px;border:3px solid #c7d5ed;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.loader,.button-spinner{animation:none}.top-nav nav a,.check-in-button{transition:none}}
-.activity-card button{cursor:pointer;transition:color .18s ease,background .18s ease,transform .18s ease}.activity-card button:hover{color:#fff;background:var(--blue);transform:translateY(-1px)}.activity-card button:focus-visible{outline:3px solid rgb(23 79 167 / 28%);outline-offset:3px}
+.activity-card button{cursor:pointer;transition:color .18s ease,background .18s ease,transform .18s ease,box-shadow .18s ease}.activity-card button:hover{color:#fff;background:var(--blue);transform:translateY(-1px)}.activity-card button:focus-visible{outline:3px solid rgb(23 79 167 / 28%);outline-offset:3px}.activity-card button.primary-action{color:#fff;background:var(--blue);box-shadow:0 6px 14px rgb(23 79 167 / 22%)}.activity-card button.primary-action:hover{box-shadow:0 9px 18px rgb(23 79 167 / 27%)}
 .workspace{padding-top:20px;padding-bottom:14px}.balance-panel{min-height:180px}.balance-copy{padding:25px 44px}.balance-copy>strong{font-size:52px}.check-in-area{padding:22px 42px}.check-in-button{height:44px;margin-top:12px}.streak-copy{margin-top:7px}.content-panel{margin-top:16px}.content-header{padding:17px 28px}.activities-layout{gap:18px;padding:16px 28px 20px}.calendar-heading{padding:15px 20px 9px}.weekdays{padding:0 15px}.weekdays span{padding:5px 0}.calendar-grid{padding:0 15px 8px}.calendar-grid time{height:38px}.calendar-summary{min-height:42px}.activity-cards{gap:12px}.activity-card{grid-template-columns:70px 1fr;gap:15px;padding:17px}.activity-icon{width:66px;height:66px}.activity-icon svg{width:34px;height:34px}.activity-card p{margin:4px 0 9px}footer{padding-top:14px}
 </style>

@@ -28,8 +28,6 @@ public interface IncentiveActivityRepository extends JpaRepository<IncentiveActi
 
   Optional<IncentiveActivity> findByCode(String code);
 
-  boolean existsByCode(String code);
-
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select activity from IncentiveActivity activity where activity.code = :code")
   Optional<IncentiveActivity> findByCodeForUpdate(@Param("code") String code);

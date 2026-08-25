@@ -5,19 +5,19 @@ import com.incentive.award.domain.AwardStatus;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 public record AwardUpsertRequest(
-    @NotBlank @Size(max = 64) @Pattern(regexp = "^[A-Z][A-Z0-9_]*$") String code,
     @NotBlank @Size(max = 100) String name,
     @NotNull AwardType type,
     @NotNull AwardStatus status,
     @Size(max = 500) String coverUrl,
     String awardPayload,
     @PositiveOrZero long totalStock,
-    @PositiveOrZero long availableStock) {
+    @PositiveOrZero long availableStock,
+    boolean redemptionEnabled,
+    @PositiveOrZero Long redemptionPointsPrice) {
 
   @AssertTrue(message = "可用库存不能大于总库存")
   public boolean isStockValid() {
@@ -32,5 +32,11 @@ public record AwardUpsertRequest(
   @AssertTrue(message = "不能通过创建或更新接口直接设置软删除状态")
   public boolean isStatusValid() {
     return status != AwardStatus.DELETED;
+  }
+
+  @AssertTrue(message = "兑换商品必须设置大于0的积分价格，且不能是谢谢参与")
+  public boolean isRedemptionValid() {
+    return !redemptionEnabled || (type != AwardType.NONE
+        && redemptionPointsPrice != null && redemptionPointsPrice > 0);
   }
 }

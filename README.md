@@ -1,55 +1,91 @@
 # 用户激励平台
 
-面向面试展示的后端优先微服务项目。当前已完成工程骨架、基础用户账户、JWT/Refresh Token 登录、五表 RBAC，以及积分余额、加减、流水和幂等能力。
+用户激励平台围绕「获取积分、参与活动、兑换奖励」构建用户互动与积分运营流程，将签到、抽奖、积分商城和奖品管理整合到一套系统中。
 
-## 结构
+项目包含用户端和运营管理端：用户可以通过每日签到积累积分，使用积分参与抽奖或兑换奖品，并查看积分变动和抽奖记录；运营人员可以维护活动规则、奖池、商品与库存，管理奖励的投放。
 
-- `services/gateway`：统一 API 入口与路由。
-- `services/user-service`：身份与会员权益边界。
-- `services/points-service`：积分资产边界。
-- `services/incentive-service`：兑换与抽奖边界。
-- `services/award-service`：异步发奖边界。
-- `services/common`：错误响应与 Trace ID 基础约定。
-- `web`：Vue 3 单前端工程。
+## 功能介绍
 
-## 本地启动
+### 用户端
 
-完整的命令、接口验证、数据卷管理和故障排查见 [Docker 操作指南](docs/docker-operation-guide.md)。
+| 功能 | 说明 |
+| --- | --- |
+| 账户与个人中心 | 注册、登录，查看和修改个人资料 |
+| 签到与积分 | 每日签到领取积分，查看连续签到状态、积分余额和收支明细 |
+| 活动抽奖 | 浏览有效活动，按活动规则参与抽奖，查看个人抽奖记录 |
+| 积分商城 | 浏览可兑换奖品及积分价格，确认并提交兑换 |
 
-1. 安装并启动 Docker Desktop，复制 `.env.example` 为 `.env`，替换所有示例密码，并将 `JWT_SECRET`、`INTERNAL_JWT_SECRET` 设置为两个不同的、至少 32 个字符的随机密钥，同时设置随机的 `XXL_JOB_ACCESS_TOKEN`。
-2. 执行 `docker compose up -d mysql redis rabbitmq nacos xxl-job-admin` 启动开发依赖。
-3. 按 Docker 操作指南在本机启动用户服务和积分服务；RabbitMQ 管理台为 `http://localhost:15672`，Nacos 为 `http://localhost:8848/nacos`，XXL-JOB 管理台为 `http://localhost:8088/xxl-job-admin`。
+### 运营管理端
 
-XXL-JOB 初始化账号为 `admin / 123456`，仅用于本地开发，首次登录后应立即修改。过期积分预占补偿任务已初始化为停止状态，积分服务执行器注册成功后在管理台启用该任务。
+| 功能 | 说明 |
+| --- | --- |
+| 活动管理 | 创建和编辑活动，设置活动时间、参与所需积分及每日参与次数 |
+| 抽奖规则 | 配置奖池，以及用户名单、积分区间、抽奖次数等参与条件 |
+| 奖品管理 | 维护奖品资料，配置抽奖展示与商城兑换信息，管理上下架状态 |
+| 库存管理 | 调整奖品库存，查询库存变动记录 |
 
-如果本机已经存在 `mysql-data` 数据卷，MySQL 不会再次自动执行新增初始化脚本。可执行以下命令补建 XXL-JOB 数据库和表，无需删除现有数据卷：
+## 业务场景
+
+一次典型的活动从运营配置开始：管理员准备奖品与库存，创建抽奖活动并设置参与条件、积分成本和奖池。活动生效后，用户可以签到积累积分，再选择参与抽奖，也可以直接在积分商城兑换奖品。
+
+系统在参与过程中校验活动资格、积分和库存，记录积分变动与活动结果。抽奖奖励通过异步任务发放，异常订单与失败消息由定时任务继续对账和补偿。
+
+## 架构设计
+
+项目采用前后端分离的微服务架构。Vue 3 前端提供用户与运营页面，请求经 API 网关进入业务服务；后端按账户、积分、激励活动和奖品划分职责，各服务独立管理自己的数据库。
+
+| 模块 | 职责 |
+| --- | --- |
+| `web` | 用户端与运营管理端 |
+| `services/gateway` | API 统一入口、路由与访问控制 |
+| `services/user-service` | 用户账户、登录会话与角色权限 |
+| `services/points-service` | 积分余额、收支流水与积分预占 |
+| `services/incentive-service` | 签到、活动规则、抽奖与兑换流程 |
+| `services/award-service` | 奖品、库存与奖励发放 |
+| `services/common` | 通用安全组件、错误响应与请求追踪 |
+
+核心设计围绕积分和奖励处理的可靠性展开：
+
+- **积分与库存保护**：通过业务幂等、积分预占和库存占用，处理重复提交及活动执行中的资源变动。
+- **异步发奖与补偿**：使用 RabbitMQ 传递发奖消息，结合 XXL-JOB 完成消息重投和异常对账。
+- **身份与权限控制**：使用 JWT、Refresh Token 和 RBAC 管理登录与访问权限，结合 Redis 支持令牌撤销。
+
+## 技术栈
+
+| 层次 | 技术 |
+| --- | --- |
+| 前端 | Vue 3、TypeScript、Vite、Vue Router、Pinia、Axios |
+| 后端 | Java 21、Spring Boot 3.2.4、Spring Cloud 2023.0.1、Spring Cloud Alibaba 2023.0.1.0 |
+| 数据存储 | MySQL 8.4、Redis 7.4 |
+| 服务与任务 | Nacos 2.5.1、RabbitMQ 4、XXL-JOB 3.4.2 |
+| 构建与部署 | Maven、npm、Docker Compose |
+
+## 快速开始
+
+1. 安装并启动 Docker Desktop。
+2. 将 `.env.example` 复制为 `.env`，按文件说明配置数据库及中间件密码。`JWT_SECRET` 和 `INTERNAL_JWT_SECRET` 应使用两个不同的、至少 32 个字符的随机密钥，并设置随机的 `XXL_JOB_ACCESS_TOKEN`。
+3. 在项目根目录执行：
 
 ```bash
-docker compose exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < /docker-entrypoint-initdb.d/01-databases.sql && mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < /docker-entrypoint-initdb.d/06-xxl-job-schema.sql'
+docker compose up -d --build
 ```
 
-后端使用 Java 21、Spring Boot 3.2.4、Spring Cloud 2023.0.1 与 Spring Cloud Alibaba 2023.0.1.0（Nacos）；该组合按 Alibaba 的官方兼容表锁定。 本地 Maven 构建命令为 `mvn verify`。前端在 `web` 目录中执行 `npm install`、`npm run dev`。
+服务启动后，访问 [用户激励平台](http://localhost)。API 网关地址为 `http://localhost:8080`。
 
-生产环境通过 HTTPS 部署时，应将 `REFRESH_TOKEN_COOKIE_SECURE` 设置为 `true`。
+本地调试时，后端使用 Java 21 和 Maven 构建：
 
-## 工程约定
+```bash
+mvn verify
+```
 
-首次初始化仓库、检查敏感文件并推送远程的完整步骤见 [Git 首次上传指南](docs/git-operation-guide.md)。
+前端开发命令：
 
-用户服务的代码阅读顺序、业务调用链、调试方法和练习题见 [用户模块学习指南](docs/user-module-learning-guide.md)。
+```bash
+cd web
+npm install
+npm run dev
+```
 
-- 对外 API 固定使用 `/api/v1` 前缀；命令接口必须支持幂等键。
-- 登录成功后使用 `Authorization: Bearer <accessToken>` 请求受保护接口；用户自身资源统一使用 `/me` 路径，不从 URL 接收用户 ID。
-- Access Token 过期后前端通过 HttpOnly Cookie 自动轮换 Refresh Token；退出登录会在服务端撤销当前令牌。
-- RBAC 使用 `users`、`roles`、`permissions`、`user_roles`、`role_permissions` 五表；网关按 JWT 权限编码执行授权，不配置角色继承。
-- 用户、积分、激励和奖品服务会再次验证用户 JWT 的签名、有效期、签发方、受众和权限；业务用户 ID 只读取已验证的 `sub`，不信任身份请求头。
-- Access Token 使用 Redis 黑名单即时撤销：退出登录按 `jti` 撤销当前令牌，角色变更按用户签发截止点撤销全部旧令牌；网关和所有下游服务均会校验，记录随 Token 最长有效期自动过期。
-- 激励服务调用内部积分命令时签发独立的一分钟服务 JWT，普通用户 JWT 无法直接执行积分增减。
-- 每个服务只拥有自己的数据库，禁止跨库查询和外键。
-- 所有 HTTP 响应透传或生成 `X-Trace-Id`；错误格式统一为 `code`、`message`、`traceId`、`timestamp`。
-- 业务实现放在各服务内；`common` 仅保留真正跨服务且稳定的技术契约，避免形成共享业务模型。
-- 提交遵循 Conventional Commits，例如 `feat(points): add balance ledger`、`fix(gateway): remove spoofed identity header`。
+XXL-JOB 管理台位于 `http://localhost:8088/xxl-job-admin`，本地初始化账号为 `admin / 123456`，首次登录后应修改密码。积分预占补偿任务需在积分服务执行器注册成功后手动启用。
 
-## 下一阶段
-
-角色权限管理页面、JWT 非对称密钥轮换和过期 Refresh Token 清理任务。
+> 已有 MySQL 数据卷不会重新执行初始化脚本，升级时需补齐新增数据库与表。通过 HTTPS 部署时，应将 `REFRESH_TOKEN_COOKIE_SECURE` 设置为 `true`。

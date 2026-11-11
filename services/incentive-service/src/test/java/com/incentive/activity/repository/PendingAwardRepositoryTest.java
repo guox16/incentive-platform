@@ -5,10 +5,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.incentive.activity.domain.LotteryParticipation;
+import com.incentive.activity.domain.LotteryOrder;
 import com.incentive.activity.domain.PendingAward;
 import com.incentive.activity.domain.PrizeType;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -35,6 +37,33 @@ class PendingAwardRepositoryTest {
     entityManager.clear();
     assertThat(repository.findById(award.getId()).orElseThrow().getStatus())
         .isEqualTo(PendingAward.Status.PROCESSING);
+  }
+
+  @Test
+  void joinsAwardProgressToTheOwnersLotteryOrder() {
+    LotteryOrder order = mock(LotteryOrder.class);
+    when(order.getId()).thenReturn(420L);
+    when(order.getActivityId()).thenReturn(1L);
+    when(order.getRuleId()).thenReturn(2L);
+    when(order.getUserId()).thenReturn(7L);
+    when(order.getLotteryPrizeId()).thenReturn(3L);
+    when(order.getPrizeId()).thenReturn(101L);
+    when(order.getPrizeName()).thenReturn("优惠券");
+    when(order.getPrizeType()).thenReturn(PrizeType.VIRTUAL);
+    LotteryParticipation participation = new LotteryParticipation(order, NOW);
+    entityManager.persist(participation);
+    PendingAward award = PendingAward.forLottery(participation, NOW);
+    award.markAwarded("USER_AWARD:10", NOW);
+    repository.saveAndFlush(award);
+
+    var progress = repository.findLotteryAwardProgress(7L, PendingAward.SourceType.LOTTERY,
+        List.of(420L));
+    assertThat(progress).singleElement().satisfies(result -> {
+      assertThat(result.getOrderId()).isEqualTo(420L);
+      assertThat(result.getStatus()).isEqualTo(PendingAward.Status.AWARDED);
+    });
+    assertThat(repository.findLotteryAwardProgress(8L, PendingAward.SourceType.LOTTERY,
+        List.of(420L))).isEmpty();
   }
 
   private LotteryParticipation participation() {

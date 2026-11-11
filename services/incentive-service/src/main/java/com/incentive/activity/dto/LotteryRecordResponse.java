@@ -11,6 +11,9 @@ public record LotteryRecordResponse(
     Long prizeId,
     String prizeName,
     PrizeType prizeType,
+    AwardStatus awardStatus,
     long pointsCost,
     Instant createdAt,
-    Instant updatedAt) {}
+    Instant updatedAt) {
+  public enum AwardStatus { PENDING, PROCESSING, RETRYING, AWARDED, FAILED }
+}

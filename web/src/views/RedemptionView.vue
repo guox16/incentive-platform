@@ -293,9 +293,12 @@ onMounted(() => {
       <section class="redemption-records" aria-labelledby="redemption-records-title">
         <header>
           <h2 id="redemption-records-title">最近兑换</h2>
-          <button type="button" :disabled="recordsLoading" @click="loadRecords">
-            {{ recordsLoading ? "刷新中…" : "刷新记录" }}
-          </button>
+          <div class="redemption-record-actions">
+            <RouterLink to="/profile#my-awards">我的奖品</RouterLink>
+            <button type="button" :disabled="recordsLoading" @click="loadRecords">
+              {{ recordsLoading ? "刷新中…" : "刷新记录" }}
+            </button>
+          </div>
         </header>
         <p v-if="recordsError" role="alert">{{ recordsError }}</p>
         <ul v-else-if="records.length">
@@ -826,6 +829,16 @@ onMounted(() => {
 .redemption-records h2 {
   margin: 0;
   font-size: 18px;
+}
+.redemption-record-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.redemption-record-actions a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .redemption-records button {
   padding: 7px 11px;

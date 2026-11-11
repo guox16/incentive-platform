@@ -55,6 +55,7 @@ public class GatewaySecurityConfiguration {
                 "/api/v1/awards/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
             .pathMatchers("/api/v1/awards/redeemable", "/api/v1/awards/redemptions",
                 "/api/v1/awards/redemptions/**").hasAuthority("REDEMPTION_PARTICIPATE")
+            .pathMatchers(HttpMethod.GET, "/api/v1/awards/me").hasAuthority("ACCOUNT_SELF")
             .pathMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")
             .pathMatchers("/api/v1/points/me/**").hasAuthority("POINTS_SELF")
             .pathMatchers("/api/v1/activities/check-ins/me/**").hasAuthority("CHECK_IN")

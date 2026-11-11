@@ -2,6 +2,7 @@ package com.incentive.activity.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.incentive.activity.domain.ActivityStatus;
@@ -10,10 +11,14 @@ import com.incentive.activity.domain.IncentiveActivity;
 import com.incentive.activity.domain.LotteryOrder;
 import com.incentive.activity.domain.LotteryPrize;
 import com.incentive.activity.domain.ParticipationRule;
+import com.incentive.activity.domain.PendingAward;
 import com.incentive.activity.domain.PrizeType;
+import com.incentive.activity.dto.LotteryRecordResponse.AwardStatus;
 import com.incentive.activity.dto.LotteryRecordStatus;
 import com.incentive.activity.repository.IncentiveActivityRepository;
 import com.incentive.activity.repository.LotteryOrderRepository;
+import com.incentive.activity.repository.PendingAwardRepository;
+import com.incentive.activity.repository.PendingAwardRepository.LotteryAwardProgress;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -31,6 +36,7 @@ class LotteryRecordQueryServiceTest {
   private static final Instant NOW = Instant.parse("2026-08-20T00:30:00Z");
   @Mock private LotteryOrderRepository orderRepository;
   @Mock private IncentiveActivityRepository activityRepository;
+  @Mock private PendingAwardRepository awardRepository;
 
   @Test
   void hidesFixedPrizeUntilOrderSucceeds() {
@@ -42,8 +48,14 @@ class LotteryRecordQueryServiceTest {
     when(orderRepository.findByUserIdOrderByCreatedAtDesc(any(), any(Pageable.class)))
         .thenReturn(new PageImpl<>(List.of(processing, successful), PageRequest.of(1, 2), 5));
     when(activityRepository.findAllById(List.of(1L))).thenReturn(List.of(activity()));
+    LotteryAwardProgress retrying = mock(LotteryAwardProgress.class);
+    when(retrying.getOrderId()).thenReturn(7002L);
+    when(retrying.getStatus()).thenReturn(PendingAward.Status.FAILED);
+    when(retrying.getRetryCount()).thenReturn(1);
+    when(awardRepository.findLotteryAwardProgress(7L, PendingAward.SourceType.LOTTERY, List.of(7002L)))
+        .thenReturn(List.of(retrying));
 
-    var response = new LotteryRecordQueryService(orderRepository, activityRepository)
+    var response = new LotteryRecordQueryService(orderRepository, activityRepository, awardRepository, 8)
         .findByUser(7L, 1, 2);
     var records = response.items();
 
@@ -53,8 +65,10 @@ class LotteryRecordQueryServiceTest {
     assertThat(response.totalPages()).isEqualTo(3);
     assertThat(records.get(0).status()).isEqualTo(LotteryRecordStatus.PROCESSING);
     assertThat(records.get(0).prizeId()).isNull();
+    assertThat(records.get(0).awardStatus()).isNull();
     assertThat(records.get(1).status()).isEqualTo(LotteryRecordStatus.SUCCESS);
     assertThat(records.get(1).prizeName()).isEqualTo("优惠券");
+    assertThat(records.get(1).awardStatus()).isEqualTo(AwardStatus.RETRYING);
   }
 
   private LotteryOrder order(Long id, String requestId) {

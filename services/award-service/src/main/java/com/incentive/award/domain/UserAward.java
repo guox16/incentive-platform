@@ -58,6 +58,8 @@ public class UserAward {
   public Long getUserId() { return userId; }
   public Long getAwardId() { return awardId; }
   public Long getIssuanceId() { return issuanceId; }
+  public AwardSourceType getSourceType() { return sourceType; }
+  public String getAwardName() { return awardName; }
   public AwardType getAwardType() { return awardType; }
   public Instant getObtainedAt() { return obtainedAt; }
 }

@@ -254,6 +254,7 @@ export type LotteryRecordResponse = {
   prizeId: number | null;
   prizeName: string | null;
   prizeType: PrizeType | null;
+  awardStatus: "PENDING" | "PROCESSING" | "RETRYING" | "AWARDED" | "FAILED" | null;
   pointsCost: number;
   createdAt: string;
   updatedAt: string;
@@ -273,4 +274,16 @@ export type RedemptionResponse = {
   pointsCost: number;
   status: "PROCESSING" | "COMPLETED" | "REJECTED";
   createdAt: string;
+};
+
+export type UserAwardPage = {
+  items: {
+    id: string;
+    name: string;
+    type: "POINTS" | "VIRTUAL";
+    source: "LOTTERY" | "REDEMPTION";
+    obtainedAt: string;
+  }[];
+  page: number;
+  totalPages: number;
 };

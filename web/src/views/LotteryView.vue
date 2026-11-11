@@ -114,10 +114,24 @@ function recordResultText(record: LotteryRecordResponse) {
 
 function recordDetailText(record: LotteryRecordResponse) {
   if (record.status === 'SUCCESS') {
-    return record.prizeType ? prizeKind(record.prizeType) : '结果已记录';
+    if (!record.prizeType) return '结果已记录';
+    if (record.prizeType === 'NONE') return prizeKind(record.prizeType);
+    const progress = record.awardStatus ? {
+      PENDING: '待发放',
+      PROCESSING: '发放中',
+      RETRYING: '正在重试发放',
+      AWARDED: '已发放',
+      FAILED: '发放失败',
+    }[record.awardStatus] : '发放状态暂不可查';
+    return `${prizeKind(record.prizeType)} · ${progress}`;
   }
   if (record.status === 'FAILED') return '积分未扣除或已退回';
   return '完成后将在这里自动更新';
+}
+
+function isAwardPending(record: LotteryRecordResponse) {
+  return record.awardStatus === 'PENDING' || record.awardStatus === 'PROCESSING'
+    || record.awardStatus === 'RETRYING';
 }
 
 function formatRecordTime(value: string) {
@@ -161,6 +175,8 @@ async function loadRecords(showLoading = false) {
   try {
     const previouslyProcessing = new Set(
       records.value.filter(record => record.status === 'PROCESSING').map(record => record.orderId));
+    const previouslyAwarding = new Set(
+      records.value.filter(isAwardPending).map(record => record.orderId));
     const response = await http.get<LotteryRecordPageResponse | LotteryRecordResponse[]>(
       '/activities/lotteries/orders/me',
       { params: { page: recordPage.value, size: LOTTERY_RECORD_PAGE_SIZE } },
@@ -179,7 +195,9 @@ async function loadRecords(showLoading = false) {
     recordTotalElements.value = page.totalElements;
     recordTotalPages.value = page.totalPages;
     if (page.items.some(record =>
-      previouslyProcessing.has(record.orderId) && record.status !== 'PROCESSING')) {
+      (previouslyProcessing.has(record.orderId) && record.status !== 'PROCESSING')
+      || (previouslyAwarding.has(record.orderId) && record.prizeType === 'POINTS'
+        && record.awardStatus === 'AWARDED'))) {
       try {
         const balanceResponse = await http.get<PointBalanceResponse>('/points/me/balance');
         balance.value = balanceResponse.data.balance;
@@ -193,7 +211,7 @@ async function loadRecords(showLoading = false) {
   } finally {
     if (requestVersion !== recordRequestVersion) return;
     recordsLoading.value = false;
-    if (records.value.some(record => record.status === 'PROCESSING')) {
+    if (records.value.some(record => record.status === 'PROCESSING' || isAwardPending(record))) {
       recordPollTimer = window.setTimeout(() => void loadRecords(), RECORD_POLL_MS);
     }
   }
@@ -314,6 +332,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  recordRequestVersion++;
   window.clearInterval(highlightTimer);
   window.clearTimeout(recordPollTimer);
 });
@@ -371,7 +390,13 @@ onBeforeUnmount(() => {
         </aside>
       </div>
       <section id="lottery-records" ref="recordsSection" class="lottery-records" aria-labelledby="records-title">
-        <header class="records-heading"><div><h2 id="records-title">我的抽奖记录</h2><p>处理中记录会自动刷新，成功后才会展示奖品结果。</p></div><button type="button" :disabled="recordsLoading" @click="loadRecords(true)">{{ recordsLoading ? '正在刷新' : '刷新记录' }}</button></header>
+        <header class="records-heading">
+          <div><h2 id="records-title">我的抽奖记录</h2><p>发奖进度会自动刷新。</p></div>
+          <div class="record-actions">
+            <RouterLink to="/profile#my-awards">我的奖品</RouterLink>
+            <button type="button" :disabled="recordsLoading" @click="loadRecords(true)">{{ recordsLoading ? '正在刷新' : '刷新记录' }}</button>
+          </div>
+        </header>
         <div v-if="recordsLoading && !records.length" class="records-state"><span class="page-loader" aria-hidden="true"></span><span>正在获取抽奖记录</span></div>
         <div v-else-if="recordsError && !records.length" class="records-state records-error"><span>{{ recordsError }}</span><button type="button" @click="loadRecords(true)">重新加载</button></div>
         <div v-else-if="!records.length" class="records-state"><strong>还没有抽奖记录</strong><span>完成首次参与后，结果会保存在这里。</span></div>
@@ -397,6 +422,8 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.record-actions{display:flex;align-items:center;gap:14px}
+.record-actions a{color:#174fa7;font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
 .activity-page{--blue:#174fa7;--navy:#102f65;--yellow:#f1c84a;--paper:#f8f7f2;--ink:#17213a;--muted:#697287;--line:#d7dde6;min-width:1180px;min-height:100vh;background:#e8edf3;color:var(--ink)}.activity-page svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.activity-defs{position:absolute;width:0!important;height:0!important;overflow:hidden}.activity-workspace{width:min(1180px,calc(100% - 96px));margin:0 auto;padding:37px 0 48px}.activity-kicker{display:flex;align-items:center;gap:9px;color:#697287;font-size:12px}.activity-kicker span:first-child{color:var(--blue);font-weight:800}.activity-kicker i{width:4px;height:4px;background:#a6b0bf;border-radius:50%}.activity-heading{display:flex;align-items:end;justify-content:space-between;margin:14px 0 24px;padding-bottom:24px;border-bottom:1px solid var(--line)}.activity-heading p{margin:0 0 5px;color:var(--blue);font-size:13px;font-weight:700}.activity-heading h1{margin:0;font-size:34px;letter-spacing:-.025em}.activity-heading>div>span{display:block;margin-top:8px;color:var(--muted);font-size:13px}.balance-chip{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--paper);border:1px solid #dfe4eb;border-radius:12px}.balance-chip svg{color:var(--blue)}.balance-chip small,.balance-chip strong{display:block}.balance-chip small{color:var(--muted);font-size:11px}.balance-chip strong{margin-top:2px;font-size:20px;font-variant-numeric:tabular-nums}.lottery-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:22px}.draw-counter,.activity-catalog{background:var(--paper);border-radius:16px;box-shadow:0 10px 28px rgb(38 50 75 / 9%)}.draw-counter{padding:28px}.counter-top{display:flex;align-items:flex-start;justify-content:space-between}.counter-top h2,.catalog-heading h2{margin:0;font-size:21px;letter-spacing:-.015em}.counter-top>div>span,.catalog-heading span{display:block;margin-top:5px;color:var(--muted);font-size:11px}.live-state{display:flex;align-items:center;gap:6px;padding:5px 9px;color:#315e3f;background:#e2efe4;border-radius:6px;font-size:11px;font-weight:700}.live-state i{width:6px;height:6px;background:#4da572;border-radius:50%}.prize-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:25px 0}.prize-cell{display:flex;min-height:116px;flex-direction:column;justify-content:center;padding:16px;border:1px solid #dfe5ee;border-radius:12px;background:#fff;transition:border-color .18s ease,transform .18s ease}.prize-cell svg{margin-bottom:10px;color:var(--blue)}.prize-cell strong{font-size:14px}.prize-cell small{margin-top:4px;color:var(--muted);font-size:11px}.prize-cell.yellow{background:#fffdf4}.prize-cell.yellow svg{color:#b07b08}.prize-cell.quiet{background:#f3f5f7}.prize-cell.quiet svg{color:#7d8798}.prize-grid.drawing .prize-cell{opacity:.6}.prize-grid.drawing .prize-cell.selected{opacity:1;border-color:var(--yellow);transform:translateY(-2px);box-shadow:0 7px 17px rgb(176 123 8 / 14%)}.draw-action{display:flex;align-items:center;justify-content:space-between;padding:17px 18px;background:var(--blue);border-radius:12px;color:#fff}.draw-action>div span,.draw-action>div strong{display:block}.draw-action>div span{color:#cbdaf3;font-size:11px}.draw-action>div strong{margin-top:1px;font-size:22px;font-variant-numeric:tabular-nums}.draw-action>div small{font-size:11px}.draw-action button,.dialog-confirm{display:flex;min-height:44px;align-items:center;justify-content:center;gap:8px;padding:0 17px;color:var(--navy);background:var(--yellow);border:0;border-radius:9px;font-size:13px;font-weight:800;transition:transform .18s ease}.draw-action button:hover:not(:disabled),.dialog-confirm:hover{transform:translateY(-1px)}.draw-action button:disabled{opacity:.8;cursor:wait}.draw-action button svg{width:17px}.button-loader{width:15px;height:15px;border:2px solid rgb(16 47 101 / 28%);border-top-color:var(--navy);border-radius:50%;animation:spin .7s linear infinite}.counter-caption{margin:14px 0 0;color:#788195;font-size:11px}.activity-catalog{padding:20px}.catalog-heading{display:flex;align-items:flex-start;justify-content:space-between;padding:4px 4px 15px;border-bottom:1px solid var(--line)}.catalog-heading strong{display:grid;min-width:38px;height:24px;place-items:center;color:var(--blue);background:#e2ebfa;border-radius:6px;font-size:11px}.activity-card{display:grid;grid-template-columns:32px minmax(0,1fr);gap:10px;width:100%;padding:15px 5px;color:var(--ink);text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);cursor:pointer;transition:background .18s ease,transform .18s ease}.activity-card:last-of-type{border-bottom:0}.activity-card:hover{background:#f0f3f8}.activity-card:focus-visible{outline:3px solid rgb(23 79 167 / 28%);outline-offset:2px}.activity-card.active{margin:10px 0;padding:14px 10px;background:#e8effa;border:1px solid #b8caea;border-radius:12px}.activity-card.active+.activity-card{border-top:1px solid var(--line)}.activity-card-mark{display:grid;width:30px;height:30px;place-items:center;color:var(--blue);background:#e2ebfa;border-radius:8px 8px 3px 8px}.activity-card.active .activity-card-mark{color:var(--navy);background:var(--yellow)}.activity-card-mark svg{width:16px}.activity-card-copy{min-width:0}.activity-card-copy small,.activity-card-copy strong,.activity-card-copy em{display:block}.activity-card-copy small{color:var(--blue);font-size:10px;font-weight:700}.activity-card-copy strong{margin:2px 0;color:var(--ink);font-size:13px}.activity-card-copy em{overflow:hidden;color:var(--muted);font-size:10px;font-style:normal;line-height:1.45;text-overflow:ellipsis;white-space:nowrap}.activity-card-meta{grid-column:2;display:flex;align-items:center;justify-content:space-between;margin-top:-4px}.activity-card-meta b{color:#536079;font-size:10px}.activity-card-meta i{color:#697287;font-size:10px;font-style:normal}.activity-card.active .activity-card-meta b{color:var(--blue)}.catalog-note{display:flex;gap:7px;margin:16px 3px 2px;color:#697287;font-size:10px;line-height:1.6}.catalog-note svg{width:15px;flex:0 0 auto;color:var(--blue)}.activity-footnote{display:flex;gap:22px;margin-top:22px;padding:18px 22px;color:#697287;border-top:1px solid var(--line);font-size:12px}.activity-footnote span{flex:0 0 98px;color:#17213a;font-weight:700}.activity-footnote p{margin:0;line-height:1.7}.result-dialog{position:fixed;inset:0;z-index:10;display:grid;place-items:center;background:rgb(16 31 56 / 45%);padding:24px}.result-dialog section{position:relative;width:390px;padding:34px;text-align:center;background:var(--paper);border-radius:16px;box-shadow:0 22px 52px rgb(9 29 64 / 28%)}.dialog-close{position:absolute;top:12px;right:16px;color:#697287;background:transparent;border:0;font-size:26px;line-height:1}.result-mark{display:grid;width:55px;height:55px;margin:0 auto 16px;place-items:center;color:var(--navy);background:var(--yellow);border-radius:15px 15px 5px 15px}.result-mark svg{width:27px}.result-dialog p{margin:0;color:var(--muted);font-size:12px}.result-dialog h2{margin:7px 0 4px;font-size:25px}.result-kind{color:var(--blue);font-size:12px;font-weight:700}.result-note{display:flex;gap:8px;margin:20px 0;padding:11px;text-align:left;color:#536079;background:#e9eef5;border-radius:9px;font-size:12px;line-height:1.65}.result-note svg{width:17px;flex:0 0 auto;color:var(--blue)}.dialog-confirm{width:100%;color:#fff;background:var(--blue)}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.prize-cell,.draw-action button,.activity-card,.dialog-confirm{transition:none}.button-loader{animation:none}}
 .page-state{display:grid;min-height:520px;place-content:center;justify-items:center;gap:10px;text-align:center}.page-state strong{font-size:21px}.page-state p{max-width:420px;margin:0;color:var(--muted);font-size:14px}.page-state button{margin-top:8px;padding:11px 18px;color:#fff;background:var(--blue);border:0;border-radius:9px;font-weight:700}.error-state strong,.action-error{color:#a23843}.page-loader{width:30px;height:30px;border:3px solid #c7d5ed;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}.empty-pool{display:grid;min-height:242px;margin:25px 0;place-content:center;gap:5px;color:var(--muted);text-align:center;background:#f1f4f8;border-radius:12px}.empty-pool strong{color:var(--ink);font-size:16px}.empty-pool span{font-size:12px}.action-error{margin:10px 0 0;font-size:12px;font-weight:600}.draw-action button:disabled{cursor:not-allowed}.prize-cell.selected{border-color:var(--yellow);box-shadow:0 7px 17px rgb(176 123 8 / 14%)}@media(prefers-reduced-motion:reduce){.page-loader{animation:none}}
 </style>

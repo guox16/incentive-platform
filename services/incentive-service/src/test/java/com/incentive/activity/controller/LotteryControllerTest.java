@@ -81,7 +81,7 @@ class LotteryControllerTest {
     when(recordQueryService.findByUser(7L, 1, 10)).thenReturn(new LotteryRecordPageResponse(List.of(
         new LotteryRecordResponse(
             7001L, "SUMMER_LOTTERY", "夏日抽奖", LotteryRecordStatus.PROCESSING,
-            null, null, null, 10L, DRAWN_AT, DRAWN_AT)), 1, 10, 16, 2));
+            null, null, null, null, 10L, DRAWN_AT, DRAWN_AT)), 1, 10, 16, 2));
 
     mockMvc.perform(get("/api/v1/activities/lotteries/orders/me")
             .with(jwt().jwt(token -> token.subject("7"))

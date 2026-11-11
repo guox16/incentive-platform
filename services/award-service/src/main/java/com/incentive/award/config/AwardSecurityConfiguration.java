@@ -27,6 +27,7 @@ public class AwardSecurityConfiguration {
                 .hasAuthority("REDEMPTION_PARTICIPATE")
             .requestMatchers("/api/v1/awards/redemptions", "/api/v1/awards/redemptions/**")
                 .hasAuthority("REDEMPTION_PARTICIPATE")
+            .requestMatchers(HttpMethod.GET, "/api/v1/awards/me").hasAuthority("ACCOUNT_SELF")
             .requestMatchers("/api/v1/awards/*/inventory-adjustments",
                 "/api/v1/awards/*/inventory-ledgers").hasAuthority("INVENTORY_MANAGE")
             .requestMatchers("/api/v1/awards/**").hasAuthority("PRIZE_MANAGE")

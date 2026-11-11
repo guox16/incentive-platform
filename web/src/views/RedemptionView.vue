@@ -4,29 +4,39 @@ import { computed, onMounted, ref } from "vue";
 import { getCurrentUserId } from "../api/auth";
 import { http } from "../api/http";
 import type {
-  ActivityDetailResponse,
   ApiError,
   PointBalanceResponse,
   PrizeResponse,
-  RedemptionItemResponse,
   RedemptionResponse,
 } from "../api/types";
 import AccountHeader from "../components/AccountHeader.vue";
 
-const activities = ref<ActivityDetailResponse[]>([]);
-const activeCode = ref("");
+type ShopItem = Pick<PrizeResponse, "id" | "name" | "availableStock"> & {
+  type: "VIRTUAL" | "POINTS";
+  pointsPrice: number;
+  displayOrder: number;
+};
+
+const items = ref<ShopItem[]>([]);
 const balance = ref(0);
 const loading = ref(true);
 const loadError = ref("");
-const current = ref<RedemptionItemResponse | null>(null);
+const current = ref<ShopItem | null>(null);
 const submitting = ref(false);
-const success = ref(false);
 const submitError = ref("");
 const result = ref<RedemptionResponse | null>(null);
-const activity = computed(
-  () => activities.value.find((item) => item.code === activeCode.value) ?? null,
-);
-const items = computed(() => activity.value?.items ?? []);
+const records = ref<RedemptionResponse[]>([]);
+const recordsLoading = ref(false);
+const recordsError = ref("");
+const statusText = {
+  PROCESSING: "处理中",
+  COMPLETED: "已完成",
+  REJECTED: "积分不足，兑换未完成",
+};
+const recordDate = new Intl.DateTimeFormat("zh-CN", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 const formattedBalance = computed(() =>
   new Intl.NumberFormat("zh-CN").format(balance.value),
 );
@@ -39,70 +49,49 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
-function category(item: RedemptionItemResponse) {
+function category(item: ShopItem) {
   return item.type === "POINTS" ? "积分奖励" : "虚拟权益";
 }
 
-function accent(item: RedemptionItemResponse) {
+function accent(item: ShopItem) {
   if (item.type === "POINTS") return "yellow";
   return item.displayOrder % 2 === 0 ? "navy" : "blue";
 }
 
-function redemptionRequestStorageKey(activityCode: string, itemId: number) {
-  return `redemptionRequestId:${getCurrentUserId() ?? "unknown"}:${activityCode}:${itemId}`;
+function redemptionRequestStorageKey(itemId: number) {
+  return `shopRedemptionRequestId:${getCurrentUserId() ?? "unknown"}:${itemId}`;
 }
 
-function getOrCreateRedemptionRequestId(activityCode: string, itemId: number) {
-  const key = redemptionRequestStorageKey(activityCode, itemId);
+function getOrCreateRedemptionRequestId(itemId: number) {
+  const key = redemptionRequestStorageKey(itemId);
   const existing = localStorage.getItem(key);
   if (existing) return existing;
-  const requestId = crypto.randomUUID();
+  const requestId = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+    (value) => value.toString(16).padStart(2, "0")).join("");
   localStorage.setItem(key, requestId);
   return requestId;
 }
 
-function clearRedemptionRequestId(activityCode: string, itemId: number) {
-  localStorage.removeItem(redemptionRequestStorageKey(activityCode, itemId));
-}
-
-async function loadActivities() {
-  loading.value = true;
+async function loadShop(showLoading = true) {
+  if (showLoading) loading.value = true;
   loadError.value = "";
   try {
     const [awardResponse, balanceResponse] = await Promise.all([
       http.get<PrizeResponse[]>("/awards/redeemable"),
       http.get<PointBalanceResponse>("/points/me/balance"),
     ]);
-    activities.value = [
-      {
-        id: 0,
-        code: "DIRECT_SHOP",
-        type: "REDEMPTION",
-        name: "积分商城",
-        status: "ACTIVE",
-        startsAt: "",
-        endsAt: null,
-        ruleVersion: 0,
-        pointsCost: 0,
-        dailyLimit: null,
-        prizes: [],
-        items: awardResponse.data.map((award, index) => ({
-          id: award.id,
-          itemCode: award.code,
-          prizeId: award.id,
-          name: award.name,
-          type: award.type as Exclude<PrizeResponse["type"], "NONE">,
-          coverUrl: award.coverUrl,
-          pointsPrice: award.redemptionPointsPrice ?? 0,
-          campaignQuota: null,
-          displayOrder: index + 1,
-        })),
-      },
-    ];
+    items.value = awardResponse.data.flatMap((award, index) => {
+      if (award.type === "NONE" || !award.redemptionPointsPrice) return [];
+      return [{
+        id: award.id,
+        name: award.name,
+        type: award.type,
+        availableStock: award.availableStock,
+        pointsPrice: award.redemptionPointsPrice,
+        displayOrder: index + 1,
+      }];
+    });
     balance.value = balanceResponse.data.balance;
-    if (!activities.value.some((item) => item.code === activeCode.value)) {
-      activeCode.value = activities.value[0]?.code ?? "";
-    }
   } catch (error) {
     loadError.value = getErrorMessage(
       error,
@@ -113,51 +102,71 @@ async function loadActivities() {
   }
 }
 
-function start(item: RedemptionItemResponse) {
+async function loadRecords() {
+  if (recordsLoading.value) return;
+  recordsLoading.value = true;
+  recordsError.value = "";
+  try {
+    const response = await http.get<RedemptionResponse[]>("/awards/redemptions");
+    records.value = response.data;
+  } catch (error) {
+    recordsError.value = getErrorMessage(error, "暂时无法获取兑换记录");
+  } finally {
+    recordsLoading.value = false;
+  }
+}
+
+function start(item: ShopItem) {
   current.value = item;
-  success.value = false;
   submitError.value = "";
   result.value = null;
 }
 
 async function confirm() {
-  if (!current.value || !activity.value || submitting.value) return;
-  const activityCode = activity.value.code;
-  const itemId = current.value.id;
+  if (!current.value || submitting.value) return;
+  const item = current.value;
   submitting.value = true;
   submitError.value = "";
   try {
     const response = await http.post<RedemptionResponse>(
-      `/activities/redemptions/${activityCode}/items/${itemId}`,
-      null,
+      `/awards/redemptions/${item.id}`,
+      { expectedPoints: item.pointsPrice },
       {
         headers: {
-          "Idempotency-Key": getOrCreateRedemptionRequestId(
-            activityCode,
-            itemId,
-          ),
+          "Idempotency-Key": getOrCreateRedemptionRequestId(item.id),
         },
       },
     );
-    clearRedemptionRequestId(activityCode, itemId);
+    localStorage.removeItem(redemptionRequestStorageKey(item.id));
     result.value = response.data;
-    balance.value = response.data.balanceAfter;
-    success.value = true;
+    void loadShop(false);
+    void loadRecords();
   } catch (error) {
     submitError.value = getErrorMessage(error, "兑换未完成，请核对积分后重试");
+    if (axios.isAxiosError(error)) {
+      const code = (error.response?.data as ApiError | undefined)?.code;
+      if (code === "REDEMPTION_PRICE_CHANGED" || code === "REDEMPTION_REQUEST_ID_REUSED"
+          || code === "REDEMPTION_UNAVAILABLE") {
+        localStorage.removeItem(redemptionRequestStorageKey(item.id));
+        void loadShop(false);
+      }
+    }
   } finally {
     submitting.value = false;
   }
 }
 
 function close() {
+  if (submitting.value) return;
   current.value = null;
-  success.value = false;
   submitError.value = "";
   result.value = null;
 }
 
-onMounted(loadActivities);
+onMounted(() => {
+  void loadShop();
+  void loadRecords();
+});
 </script>
 
 <template>
@@ -196,21 +205,15 @@ onMounted(loadActivities);
         <p>请稍候，正在获取商品、价格与积分余额。</p>
       </section>
       <section v-else-if="loadError" class="page-state error-state">
-        <strong>兑换活动暂不可用</strong>
+        <strong>积分商城暂不可用</strong>
         <p>{{ loadError }}</p>
-        <button type="button" @click="loadActivities">重新加载</button>
-      </section>
-      <section v-else-if="!activity" class="page-state">
-        <strong>当前暂无可兑换商品</strong>
-        <p>管理员上架并配置兑换商品后会显示在这里。</p>
-        <button type="button" @click="loadActivities">刷新活动</button>
+        <button type="button" @click="loadShop()">重新加载</button>
       </section>
 
       <template v-else>
         <header class="redeem-heading">
           <div>
-            <p>积分商城</p>
-            <h1>{{ activity.name }}</h1>
+            <h1>积分商城</h1>
             <span>确认兑换后，将从您的账户扣除相应积分。</span>
           </div>
           <div class="redeem-balance">
@@ -220,18 +223,6 @@ onMounted(loadActivities);
             </div>
           </div>
         </header>
-        <label v-if="activities.length > 1" class="activity-select"
-          ><span>当前活动</span
-          ><select v-model="activeCode" @change="close">
-            <option
-              v-for="option in activities"
-              :key="option.code"
-              :value="option.code"
-            >
-              {{ option.name }}
-            </option>
-          </select></label
-        >
         <div class="redeem-layout">
           <section>
             <div class="shelf-heading">
@@ -253,15 +244,11 @@ onMounted(loadActivities);
                     <span>可兑换</span>
                   </div>
                   <p>
-                    {{
-                      item.campaignQuota == null
-                        ? "数量不限"
-                        : `限量 ${item.campaignQuota} 份`
-                    }}
+                    剩余 {{ item.availableStock }} 份
                   </p>
                   <footer>
                     <strong>{{ item.pointsPrice }} <small>积分</small></strong
-                    ><span class="display-only">商品展示中</span>
+                    ><button type="button" @click="start(item)">兑换</button>
                   </footer>
                 </div>
               </article>
@@ -303,6 +290,24 @@ onMounted(loadActivities);
           </aside>
         </div>
       </template>
+      <section class="redemption-records" aria-labelledby="redemption-records-title">
+        <header>
+          <h2 id="redemption-records-title">最近兑换</h2>
+          <button type="button" :disabled="recordsLoading" @click="loadRecords">
+            {{ recordsLoading ? "刷新中…" : "刷新记录" }}
+          </button>
+        </header>
+        <p v-if="recordsError" role="alert">{{ recordsError }}</p>
+        <ul v-else-if="records.length">
+          <li v-for="record in records" :key="record.id">
+            <strong>{{ record.awardName }}</strong>
+            <time :datetime="record.createdAt">{{ recordDate.format(new Date(record.createdAt)) }}</time>
+            <span>{{ record.pointsCost }} 积分</span>
+            <span>{{ statusText[record.status] }}</span>
+          </li>
+        </ul>
+        <p v-else-if="!recordsLoading">暂无兑换记录</p>
+      </section>
     </main>
     <div
       v-if="current"
@@ -312,7 +317,7 @@ onMounted(loadActivities);
       aria-labelledby="confirm-title"
       @click.self="close"
     >
-      <section v-if="!success">
+      <section v-if="!result">
         <button
           class="close"
           type="button"
@@ -363,11 +368,11 @@ onMounted(loadActivities);
         <span class="dialog-icon"
           ><svg><use href="#redeem-check" /></svg
         ></span>
-        <p>兑换成功</p>
-        <h2>{{ result?.prizeName || current.name }}</h2>
-        <span>相应积分已从账户余额中扣除</span
-        ><small v-if="result">当前积分余额 {{ formattedBalance }}</small
-        ><button type="button" class="submit" @click="close">完成</button>
+        <p>{{ statusText[result.status] }}</p>
+        <h2 id="confirm-title">{{ result.awardName }}</h2>
+        <span v-if="result.status === 'COMPLETED'">已扣除 {{ result.pointsCost }} 积分并发放奖品。</span>
+        <span v-else-if="result.status === 'PROCESSING'">稍后可在最近兑换中查看结果。</span>
+        <button type="button" class="submit" @click="close">关闭</button>
       </section>
     </div>
   </div>
@@ -592,11 +597,6 @@ onMounted(loadActivities);
 .item-copy button svg {
   width: 15px;
 }
-.display-only {
-  color: #687286;
-  font-size: 11px;
-  font-weight: 800;
-}
 .delivery-panel {
   align-self: start;
   padding: 26px;
@@ -812,27 +812,42 @@ onMounted(loadActivities);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
-.activity-select {
+.redemption-records {
+  margin-top: 24px;
+  padding: 24px;
+  background: var(--paper);
+  border-radius: 16px;
+}
+.redemption-records header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin: -8px 0 18px;
-  color: var(--muted);
-  font-size: 12px;
+  justify-content: space-between;
 }
-.activity-select select {
-  min-width: 220px;
-  height: 38px;
-  padding: 0 34px 0 11px;
-  color: var(--ink);
+.redemption-records h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.redemption-records button {
+  padding: 7px 11px;
+  color: var(--blue);
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 8px;
 }
-.activity-select select:focus-visible {
-  outline: 3px solid rgb(23 79 167 / 18%);
-  outline-offset: 2px;
+.redemption-records ul {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.redemption-records li {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 12px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+.redemption-records li span, .redemption-records time, .redemption-records p {
+  color: var(--muted);
 }
 .empty-shelf {
   display: grid;
@@ -858,13 +873,6 @@ onMounted(loadActivities);
 .submit-error {
   margin-top: 12px !important;
   font-weight: 600;
-}
-.success-card small {
-  display: block;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
 }
 @keyframes spin {
   to {

@@ -268,18 +268,9 @@ export type LotteryRecordPageResponse = {
 };
 
 export type RedemptionResponse = {
-  redemptionId: number;
-  activityCode: string;
-  itemId: number;
-  itemCode: string;
-  userId: number;
-  prizeId: number;
-  prizeName: string;
-  prizeType: Exclude<PrizeType, "NONE">;
-  coverUrl: string | null;
+  id: string;
+  awardName: string;
   pointsCost: number;
-  pointTransactionId: number;
-  balanceAfter: number;
-  pendingAwardCreated: boolean;
-  redeemedAt: string;
+  status: "PROCESSING" | "COMPLETED" | "REJECTED";
+  createdAt: string;
 };

@@ -59,7 +59,7 @@ public class AwardIssuanceService {
     return "POINT_TRANSACTION:" + result.transactionId();
   }
 
-  private long readPoints(String payload) {
+  long readPoints(String payload) {
     try {
       JsonNode root = objectMapper.readTree(payload);
       JsonNode points = root == null ? null : root.get("points");

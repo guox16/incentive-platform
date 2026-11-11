@@ -40,9 +40,15 @@ public class AwardInventoryLedger {
 
   public AwardInventoryLedger(Long awardId, String businessNo, long changeAmount,
       long availableAfter, String remark, Instant now) {
+    this(awardId, businessNo, changeAmount > 0 ? "INCREASE" : "DECREASE",
+        changeAmount, availableAfter, remark, now);
+  }
+
+  public AwardInventoryLedger(Long awardId, String businessNo, String operationType,
+      long changeAmount, long availableAfter, String remark, Instant now) {
     this.awardId = awardId;
     this.businessNo = businessNo;
-    this.operationType = changeAmount > 0 ? "INCREASE" : "DECREASE";
+    this.operationType = operationType;
     this.changeAmount = changeAmount;
     this.availableAfter = availableAfter;
     this.remark = remark;

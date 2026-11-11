@@ -102,6 +102,11 @@ public class Award {
     updatedAt = now;
   }
 
+  public void releaseInventory(Instant now) {
+    if (availableStock < totalStock) availableStock++;
+    updatedAt = now;
+  }
+
   private void apply(AwardUpsertRequest request, Instant now) {
     name = request.name().trim();
     type = request.type();

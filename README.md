@@ -88,4 +88,4 @@ npm run dev
 
 XXL-JOB 管理台位于 `http://localhost:8088/xxl-job-admin`，本地初始化账号为 `admin / 123456`，首次登录后应修改密码。积分预占补偿任务需在积分服务执行器注册成功后手动启用。
 
-> 已有 MySQL 数据卷不会重新执行初始化脚本，升级时需补齐新增数据库与表。通过 HTTPS 部署时，应将 `REFRESH_TOKEN_COOKIE_SECURE` 设置为 `true`。
+> 已有 MySQL 数据卷不会重新执行初始化脚本。升级到商城直兑版本前，在已有 MySQL 实例执行 [07-shop-redemption.sql](deploy/mysql/init/07-shop-redemption.sql)。通过 HTTPS 部署时，应将 `REFRESH_TOKEN_COOKIE_SECURE` 设置为 `true`。

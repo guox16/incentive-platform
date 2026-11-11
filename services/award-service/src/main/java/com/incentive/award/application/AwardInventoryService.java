@@ -3,10 +3,13 @@ package com.incentive.award.application;
 import com.incentive.award.domain.Award;
 import com.incentive.award.domain.AwardInventoryLedger;
 import com.incentive.award.domain.AwardIssuance;
+import com.incentive.award.domain.AwardSourceType;
+import com.incentive.award.domain.ShopRedemption;
 import com.incentive.award.repository.AwardInventoryLedgerRepository;
 import com.incentive.award.repository.AwardRepository;
 import com.incentive.award.support.AwardBusinessException;
 import java.time.Clock;
+import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,16 @@ public class AwardInventoryService {
 
   @Transactional
   public void consume(AwardIssuance issuance) {
+    if (issuance.getSourceType() == AwardSourceType.SHOP_REDEMPTION) {
+      AwardInventoryLedger reservation = ledgerRepository
+          .findByBusinessNo(reservationKey(issuance.getSourceRecordId()))
+          .orElseThrow(() -> new IllegalStateException("兑换单缺少库存预占流水"));
+      if (!reservation.getAwardId().equals(issuance.getAwardId())
+          || ledgerRepository.findByBusinessNo(releaseKey(issuance.getSourceRecordId())).isPresent()) {
+        throw new IllegalStateException("兑换单的库存预占无效");
+      }
+      return;
+    }
     String businessNo = "ISSUANCE:" + issuance.getId();
     AwardInventoryLedger existing = ledgerRepository.findByBusinessNo(businessNo).orElse(null);
     if (existing != null) {
@@ -50,4 +63,24 @@ public class AwardInventoryService {
     ledgerRepository.save(new AwardInventoryLedger(award.getId(), businessNo, -1L,
         award.getAvailableStock(), "发奖扣减：" + issuance.getCommandKey(), clock.instant()));
   }
+
+  void reserveForRedemption(Award award, Long redemptionId, Instant now) {
+    award.consumeInventory(now);
+    ledgerRepository.save(new AwardInventoryLedger(award.getId(), reservationKey(redemptionId),
+        "RESERVE", -1L, award.getAvailableStock(), "商城兑换预占", now));
+  }
+
+  void releaseRedemption(ShopRedemption redemption, Instant now) {
+    Award award = awardRepository.findByIdWithPessimisticLock(redemption.getAwardId())
+        .orElseThrow(() -> new IllegalStateException("兑换奖品不存在"));
+    long before = award.getAvailableStock();
+    award.releaseInventory(now);
+    ledgerRepository.save(new AwardInventoryLedger(award.getId(), releaseKey(redemption.getId()),
+        "RELEASE", award.getAvailableStock() - before, award.getAvailableStock(),
+        "商城兑换积分不足，释放库存", now));
+  }
+
+  private static String reservationKey(Long id) { return "SHOP_RESERVE:" + id; }
+
+  private static String releaseKey(Long id) { return "SHOP_RELEASE:" + id; }
 }

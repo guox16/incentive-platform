@@ -59,14 +59,23 @@ public class DailyCheckInService {
       }
     }
 
-    Long balanceAfter = null;
-    if (record.getRewardStatus() == RewardStatus.PENDING) {
-      var credit = pointsClient.credit(record.getId(), userId, record.getRewardPoints());
-      record = transactions.markAwarded(record.getId(), credit.transactionId(), clock.instant());
-      balanceAfter = credit.balanceAfter();
-    }
-    return response(userId, today, record, record.getStreakDays(), balanceAfter);
+    RewardGrant grant = grantReward(record);
+    return response(userId, today, grant.record(), record.getStreakDays(), grant.balanceAfter());
   }
+
+  public void retryReward(Long checkInId) {
+    repository.findById(checkInId).ifPresent(this::grantReward);
+  }
+
+  private RewardGrant grantReward(DailyCheckIn record) {
+    if (record.getRewardStatus() != RewardStatus.PENDING) return new RewardGrant(record, null);
+    var credit = pointsClient.credit(record.getId(), record.getUserId(), record.getRewardPoints());
+    DailyCheckIn awarded =
+        transactions.markAwarded(record.getId(), credit.transactionId(), clock.instant());
+    return new RewardGrant(awarded, credit.balanceAfter());
+  }
+
+  private record RewardGrant(DailyCheckIn record, Long balanceAfter) {}
 
   private DailyCheckIn findExisting(Long userId, String requestId, LocalDate businessDate) {
     DailyCheckIn byRequest = repository.findByRequestId(requestId).orElse(null);

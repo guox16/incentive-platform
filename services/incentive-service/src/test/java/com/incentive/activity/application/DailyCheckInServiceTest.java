@@ -126,12 +126,12 @@ class DailyCheckInServiceTest {
     DailyCheckIn created = record(REQUEST_ID, TODAY, 1, 24L, false);
     when(transactions.create(REQUEST_ID, USER_ID, TODAY, 1, 10, NOW)).thenReturn(created);
     when(pointsClient.credit(24L, USER_ID, 10)).thenThrow(new IncentiveBusinessException(
-        "CHECK_IN_REWARD_PENDING", "签到已记录，积分发放暂未完成，请重试",
+        "CHECK_IN_REWARD_PENDING", "签到已记录，积分稍后自动补发",
         org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE));
 
     assertThatThrownBy(() -> service.checkIn(USER_ID, REQUEST_ID))
         .isInstanceOf(IncentiveBusinessException.class)
-        .hasMessage("签到已记录，积分发放暂未完成，请重试");
+        .hasMessage("签到已记录，积分稍后自动补发");
 
     assertThat(created.getRewardStatus().name()).isEqualTo("PENDING");
     verify(transactions, never()).markAwarded(any(), any(), any());
@@ -153,6 +153,24 @@ class DailyCheckInServiceTest {
 
     assertThat(response.rewardStatus()).isEqualTo("AWARDED");
     assertThat(response.checkInId()).isEqualTo(25L);
+    verify(transactions, never()).create(any(), any(), any(), any(Integer.class), anyLong(), any());
+  }
+
+  @Test
+  void backgroundRetryCreditsYesterdayWithoutCreatingAnotherCheckIn() {
+    DailyCheckIn pending = record(REQUEST_ID, TODAY.minusDays(1), 2, 26L, false);
+    when(repository.findById(26L)).thenReturn(Optional.of(pending));
+    when(pointsClient.credit(26L, USER_ID, 10)).thenReturn(new PointsClient.PointCreditResult(36L, 130));
+    when(transactions.markAwarded(26L, 36L, NOW)).thenAnswer(invocation -> {
+      pending.markAwarded(36L, NOW);
+      return pending;
+    });
+
+    service.retryReward(26L);
+    service.retryReward(26L);
+
+    assertThat(pending.getPointTransactionId()).isEqualTo(36L);
+    verify(pointsClient).credit(26L, USER_ID, 10);
     verify(transactions, never()).create(any(), any(), any(), any(Integer.class), anyLong(), any());
   }
 

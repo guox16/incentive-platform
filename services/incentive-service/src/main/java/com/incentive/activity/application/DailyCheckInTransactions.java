@@ -28,7 +28,7 @@ public class DailyCheckInTransactions {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public DailyCheckIn markAwarded(Long checkInId, Long pointTransactionId, Instant now) {
-    DailyCheckIn record = repository.findById(checkInId).orElseThrow(() ->
+    DailyCheckIn record = repository.findByIdForUpdate(checkInId).orElseThrow(() ->
         new IncentiveBusinessException(
             "CHECK_IN_NOT_FOUND", "签到记录不存在", HttpStatus.NOT_FOUND));
     record.markAwarded(pointTransactionId, now);

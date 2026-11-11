@@ -6,6 +6,7 @@ import com.incentive.activity.security.InternalJwtTokenService;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -18,7 +19,10 @@ public class PointsClient {
 
   public PointsClient(RestClient.Builder builder, @Value("${clients.points.base-url}") String baseUrl,
       InternalJwtTokenService tokenService) {
-    this.restClient = builder.baseUrl(baseUrl).build();
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout(3000);
+    requestFactory.setReadTimeout(5000);
+    this.restClient = builder.baseUrl(baseUrl).requestFactory(requestFactory).build();
     this.tokenService = tokenService;
   }
 
@@ -30,11 +34,13 @@ public class PointsClient {
           .body(new PointCreditRequest(businessId, userId, amount, "CHECK_IN", "每日签到奖励"))
           .retrieve()
           .body(PointCreditResponse.class);
-      if (response == null) throw new RestClientException("积分服务未返回发放结果");
+      if (response == null || response.transactionId() == null || response.balanceAfter() == null) {
+        throw new RestClientException("积分服务未返回发放结果");
+      }
       return new PointCreditResult(response.transactionId(), response.balanceAfter());
     } catch (RestClientException ex) {
       throw new IncentiveBusinessException(
-          "CHECK_IN_REWARD_PENDING", "签到已记录，积分发放暂未完成，请重试",
+          "CHECK_IN_REWARD_PENDING", "签到已记录，积分稍后自动补发",
           HttpStatus.SERVICE_UNAVAILABLE);
     }
   }
@@ -175,7 +181,7 @@ public class PointsClient {
   }
 
   private record PointCreditRequest(Long businessId, Long userId, long amount, String source, String remark) {}
-  private record PointCreditResponse(Long transactionId, long balanceAfter) {}
+  private record PointCreditResponse(Long transactionId, Long balanceAfter) {}
   private record PointDebitRequest(Long businessId, Long userId, long amount, String source, String remark) {}
   private record PointDebitResponse(Long transactionId, long balanceAfter) {}
   private record PointReservationRequest(Long businessId, Long userId, long amount,

@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
@@ -14,6 +15,7 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "daily_check_ins",
+    indexes = @Index(name = "idx_daily_check_ins_reward_retry", columnList = "reward_status,updated_at,id"),
     uniqueConstraints = {
         @UniqueConstraint(name = "uk_daily_check_ins_request_id", columnNames = "request_id"),
         @UniqueConstraint(name = "uk_daily_check_ins_user_date", columnNames = {"user_id", "check_in_date"})
@@ -73,6 +75,7 @@ public class DailyCheckIn {
   }
 
   public void markAwarded(Long transactionId, Instant now) {
+    if (rewardStatus == RewardStatus.AWARDED) return;
     this.pointTransactionId = transactionId;
     this.rewardStatus = RewardStatus.AWARDED;
     this.rewardedAt = now;

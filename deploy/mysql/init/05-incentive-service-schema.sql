@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS daily_check_ins (
     UNIQUE KEY uk_daily_check_ins_user_date (user_id, check_in_date),
     KEY idx_daily_check_ins_user_date (user_id, check_in_date DESC),
     KEY idx_daily_check_ins_reward_status (reward_status, created_at),
+    KEY idx_daily_check_ins_reward_retry (reward_status, updated_at, id),
     CONSTRAINT chk_daily_check_ins_streak_days CHECK (streak_days > 0),
     CONSTRAINT chk_daily_check_ins_reward_status
         CHECK (reward_status IN ('PENDING', 'AWARDED', 'FAILED'))

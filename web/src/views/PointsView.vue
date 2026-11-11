@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import axios from 'axios';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { http } from '../api/http';
 import { getCurrentUserId } from '../api/auth';
@@ -48,6 +48,8 @@ const recordTotalElements = ref(0);
 const recordTotalPages = ref(0);
 const POINT_RECORD_PAGE_SIZE = 10;
 let ledgerRequestVersion = 0;
+let checkInStatusTimer: number | undefined;
+let refreshingCheckIn = false;
 
 const groupedRecords = computed(() => {
   const groups = new Map<string, PointRecord[]>();
@@ -108,21 +110,17 @@ function getErrorMessage(requestError: unknown, fallback = '暂时无法获取�
   return fallback;
 }
 
-function checkInRequestStorageKey() {
-  return `checkInRequestId:${getCurrentUserId() ?? 'unknown'}`;
+function checkInRequestStorageKey(date: string) {
+  return `checkInRequestId:${getCurrentUserId() ?? 'unknown'}:${date}`;
 }
 
-function getOrCreateCheckInRequestId() {
-  const key = checkInRequestStorageKey();
+function getOrCreateCheckInRequestId(key: string) {
   const existing = localStorage.getItem(key);
   if (existing) return existing;
-  const requestId = crypto.randomUUID();
+  const requestId = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+    value => value.toString(16).padStart(2, '0')).join('');
   localStorage.setItem(key, requestId);
   return requestId;
-}
-
-function clearCheckInRequestId() {
-  localStorage.removeItem(checkInRequestStorageKey());
 }
 
 function transactionType() {
@@ -188,8 +186,7 @@ async function loadPoints() {
     ]);
     balance.value = balanceResponse.data.balance;
     applyTransactionPage(transactionsResponse.data);
-    checkIn.value = checkInResponse.data;
-    if (checkInResponse.data.rewardStatus === 'AWARDED') clearCheckInRequestId();
+    applyCheckInStatus(checkInResponse.data);
   } catch (requestError) {
     if (axios.isAxiosError(requestError) && requestError.response?.status === 401) { await router.replace('/login'); return; }
     error.value = getErrorMessage(requestError);
@@ -198,31 +195,65 @@ async function loadPoints() {
   }
 }
 
+function applyCheckInStatus(status: DailyCheckInResponse) {
+  checkIn.value = status;
+  if (status.checkedInToday && status.rewardStatus === 'AWARDED') {
+    localStorage.removeItem(checkInRequestStorageKey(status.businessDate));
+    checkInError.value = '';
+  }
+}
+
+async function refreshCheckInStatus() {
+  if (refreshingCheckIn) return;
+  refreshingCheckIn = true;
+  try {
+    const wasCompleted = checkInCompleted.value;
+    const response = await http.get<DailyCheckInResponse>('/activities/check-ins/me');
+    applyCheckInStatus(response.data);
+    if (!wasCompleted && checkInCompleted.value) await refreshCheckInLedger();
+  } catch {
+    // The pending reward can still be checked on the next refresh.
+  } finally {
+    refreshingCheckIn = false;
+  }
+}
+
+async function refreshCheckInLedger() {
+  const response = await http.get<PointBalanceResponse>('/points/me/balance');
+  balance.value = response.data.balance;
+  recordPage.value = 0;
+  await loadTransactions(false);
+  if (ledgerError.value) throw new Error(ledgerError.value);
+}
+
 async function performCheckIn() {
-  if (checkingIn.value || checkInCompleted.value) return;
+  if (checkingIn.value || checkInCompleted.value || !checkIn.value || refreshingCheckIn) return;
   checkingIn.value = true;
   checkInError.value = '';
   checkInFeedback.value = '';
   try {
-    const requestId = getOrCreateCheckInRequestId();
+    const key = checkInRequestStorageKey(checkIn.value.businessDate);
+    const requestId = getOrCreateCheckInRequestId(key);
     const response = await http.post<DailyCheckInResponse>('/activities/check-ins/me', null, {
       headers: { 'Idempotency-Key': requestId },
     });
-    checkIn.value = response.data;
-    if (response.data.rewardStatus === 'AWARDED') clearCheckInRequestId();
+    if (!response.data.checkedInToday) {
+      if (response.data.rewardStatus === 'AWARDED') localStorage.removeItem(key);
+      await refreshCheckInStatus();
+      if (!checkInRecorded.value) checkInError.value = '签到日期已更新，请签到领取今日积分';
+      return;
+    }
+    applyCheckInStatus(response.data);
     if (response.data.balanceAfter !== null) balance.value = response.data.balanceAfter;
     checkInFeedback.value = `签到成功，获得 ${response.data.rewardPoints} 积分`;
     try {
-      const balanceResponse = await http.get<PointBalanceResponse>('/points/me/balance');
-      balance.value = balanceResponse.data.balance;
-      recordPage.value = 0;
-      await loadTransactions(false);
-      if (ledgerError.value) throw new Error(ledgerError.value);
+      await refreshCheckInLedger();
     } catch {
       checkInFeedback.value = `签到成功，获得 ${response.data.rewardPoints} 积分；积分明细稍后刷新`;
     }
   } catch (requestError) {
     checkInError.value = getErrorMessage(requestError, '签到未完成，请稍后重试');
+    await refreshCheckInStatus();
   } finally {
     checkingIn.value = false;
   }
@@ -242,7 +273,14 @@ function toPointRecord(transaction: PointTransactionResponse): PointRecord {
   };
 }
 
-onMounted(loadPoints);
+onMounted(() => {
+  void loadPoints();
+  checkInStatusTimer = window.setInterval(() => {
+    if (checkInPending.value && !checkingIn.value) void refreshCheckInStatus();
+  }, 10000);
+});
+
+onBeforeUnmount(() => window.clearInterval(checkInStatusTimer));
 </script>
 
 <template>
@@ -268,7 +306,7 @@ onMounted(loadPoints);
         <section class="balance-panel" aria-labelledby="balance-title">
           <div class="balance-copy"><span id="balance-title">当前可用积分</span><strong>{{ formattedBalance }}</strong><p>积分可用于参与活动或兑换商品，以实际规则为准。</p></div>
           <div class="check-in-area">
-            <div class="check-in-heading"><svg><use href="#points-calendar" /></svg><div><h1>{{ checkInRecorded ? '今日已签到' : '每日签到' }}</h1><p>{{ checkInPending ? `${checkIn?.rewardPoints ?? 10} 积分待到账，请稍后重试` : checkInCompleted ? '今日签到积分已到账' : '每天签到，积累下一次收获' }}</p></div></div>
+            <div class="check-in-heading"><svg><use href="#points-calendar" /></svg><div><h1>{{ checkInRecorded ? '今日已签到' : '每日签到' }}</h1><p>{{ checkInPending ? `${checkIn?.rewardPoints ?? 10} 积分待到账，系统将自动补发` : checkInCompleted ? '今日签到积分已到账' : '每天签到，积累下一次收获' }}</p></div></div>
             <button class="check-in-button" type="button" :disabled="checkingIn || checkInCompleted" @click="performCheckIn">
               <span v-if="checkingIn" class="button-spinner" aria-hidden="true"></span>
               <span>{{ checkingIn ? (checkInPending ? '正在重试积分发放' : '签到处理中') : checkInCompleted ? '积分已到账' : checkInPending ? '立即重试' : '今日签到' }}</span>
